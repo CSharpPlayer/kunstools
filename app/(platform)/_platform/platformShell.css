@@ -1,0 +1,705 @@
+.platformShell {
+  display: flex;
+  width: 100%;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 480px;
+  overflow: hidden;
+  background: var(--platformBackground);
+}
+
+.platformSidebar {
+  position: relative;
+  z-index: 30;
+  display: flex;
+  flex: 0 0 232px;
+  flex-direction: column;
+  width: auto;
+  min-width: 0;
+  background: rgba(255, 255, 255, 0.96);
+  border-right: 1px solid var(--platformBorder);
+  overflow: hidden;
+  transition: flex-basis 210ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.platformSidebarCollapsed {
+  flex-basis: 64px;
+  width: auto;
+}
+
+.platformSidebarHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 64px;
+  padding: 12px;
+  border-bottom: 1px solid #edf1f6;
+}
+
+.platformBrand {
+  position: relative;
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.platformBrandMark {
+  display: grid;
+  flex: 0 0 38px;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  color: #fff;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+  background: var(--platformBlue);
+  border-radius: 10px;
+  box-shadow: 0 6px 14px rgba(37, 99, 235, 0.16);
+}
+
+.platformBrandText {
+  overflow: hidden;
+  color: #1e293b;
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.platformIconButton,
+.platformMobileMenuButton {
+  display: grid;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  place-items: center;
+  color: #64748b;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  cursor: pointer;
+  transition: color 170ms ease-out, background 170ms ease-out,
+    border-color 170ms ease-out;
+}
+
+.platformIconButton:hover,
+.platformMobileMenuButton:hover {
+  color: #1e40af;
+  background: var(--platformBlueSoft);
+  border-color: #dbeafe;
+}
+
+.platformMobileSidebarClose,
+.platformMobileMenuButton {
+  display: none;
+}
+
+.platformSidebarCollapsed .platformSidebarHeader {
+  flex-direction: column;
+  min-height: 100px;
+  padding-inline: 12px;
+}
+
+.platformSidebarCollapsed .platformBrand {
+  flex: 0 0 auto;
+}
+
+.platformSidebarCollapsed .platformBrandText,
+.platformSidebarCollapsed .platformSidebarLabel,
+.platformSidebarCollapsed .platformToolbarChevron {
+  display: none;
+}
+
+.platformSidebarNav {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+  padding: 14px 12px;
+}
+
+.platformSidebarItem {
+  position: relative;
+  display: flex;
+  width: 100%;
+  min-height: 42px;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  color: #536179;
+  text-align: left;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: color 170ms ease-out, background 170ms ease-out,
+    border-color 170ms ease-out;
+}
+
+.platformSidebarItem:hover {
+  color: #1e40af;
+  background: #f8fbff;
+  border-color: #e5edfa;
+}
+
+.platformSidebarItemActive {
+  color: #1d4ed8;
+  background: var(--platformBlueSoft);
+  border-color: #dbeafe;
+}
+
+.platformSidebarLabel {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 540;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.platformToolbarGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.platformToolbarChevron {
+  margin-left: auto;
+  transition: transform 180ms ease-out;
+}
+
+.platformToolbarChevronOpen {
+  transform: rotate(180deg);
+}
+
+.platformToolbarModules {
+  display: flex;
+  max-height: 0;
+  overflow: hidden;
+  flex-direction: column;
+  opacity: 0;
+  transform: translateY(-3px);
+  transition: max-height 210ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 150ms ease-out, transform 190ms ease-out;
+}
+
+.platformToolbarModules > button {
+  flex: 0 0 44px;
+}
+
+.platformToolbarModulesOpen {
+  max-height: 240px;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.platformModuleItem {
+  margin-top: 2px;
+  padding-left: 19px;
+}
+
+.platformModuleLabel {
+  display: -webkit-box;
+  overflow: hidden;
+  line-height: 1.32;
+  text-overflow: ellipsis;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.platformSidebarCollapsed .platformSidebarItem {
+  justify-content: center;
+  padding-inline: 0;
+}
+
+.platformSidebarCollapsed .platformModuleItem {
+  margin-top: 2px;
+}
+
+.platformSidebarCollapsed [data-platform-tooltip]::after {
+  position: absolute;
+  top: 50%;
+  left: calc(100% + 11px);
+  z-index: 70;
+  width: max-content;
+  max-width: 250px;
+  padding: 7px 9px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+  pointer-events: none;
+  content: attr(data-platform-tooltip);
+  background: #172033;
+  border-radius: 7px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18);
+  opacity: 0;
+  transform: translate(-4px, -50%);
+  transition: opacity 140ms ease-out, transform 140ms ease-out;
+}
+
+.platformSidebarCollapsed [data-platform-tooltip]:hover::after,
+.platformSidebarCollapsed [data-platform-tooltip]:focus-visible::after {
+  opacity: 1;
+  transform: translate(0, -50%);
+}
+
+.platformMobileOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: none;
+  padding: 0;
+  background: rgba(15, 23, 42, 0.34);
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 190ms ease-out;
+}
+
+.platformWorkspace {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.platformTabsHeader {
+  display: flex;
+  flex: 0 0 40px;
+  min-width: 0;
+  height: 40px;
+  background: rgba(255, 255, 255, 0.94);
+  border-bottom: 1px solid var(--platformBorder);
+}
+
+.platformTabsScroller {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  scroll-behavior: smooth;
+}
+
+.platformTabsScroller::-webkit-scrollbar {
+  display: none;
+}
+
+.platformTab {
+  position: relative;
+  display: flex;
+  flex: 0 0 auto;
+  min-width: 92px;
+  max-width: 230px;
+  height: 40px;
+  align-items: center;
+  border-right: 1px solid #edf1f6;
+  transition: color 160ms ease-out, background 160ms ease-out;
+}
+
+.platformTab::after {
+  position: absolute;
+  right: 10px;
+  bottom: 0;
+  left: 10px;
+  height: 2px;
+  content: "";
+  background: transparent;
+  border-radius: 2px 2px 0 0;
+}
+
+.platformTab:hover {
+  background: #f8fafc;
+}
+
+.platformTabActive {
+  color: #1d4ed8;
+  background: var(--platformBlueSoft);
+}
+
+.platformTabActive::after {
+  background: var(--platformBlue);
+}
+
+.platformTabLabel {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0 12px;
+  overflow: hidden;
+  color: inherit;
+  font-size: 13px;
+  font-weight: 540;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.platformTab:has(.platformTabClose) .platformTabLabel {
+  padding-right: 32px;
+}
+
+.platformTabClose {
+  position: absolute;
+  right: 8px;
+  display: grid;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  place-items: center;
+  color: #64748b;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  opacity: 0;
+  transition: color 150ms ease-out, background 150ms ease-out,
+    opacity 150ms ease-out;
+}
+
+.platformTabActive .platformTabClose,
+.platformTab:hover .platformTabClose,
+.platformTab:focus-within .platformTabClose {
+  opacity: 1;
+}
+
+.platformTabClose:hover {
+  color: #1e293b;
+  background: rgba(148, 163, 184, 0.22);
+}
+
+.platformContent {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  background: var(--platformBackground);
+}
+
+.platformContentTransition {
+  min-height: 100%;
+}
+
+.platformHomeGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(148px, 160px));
+  gap: 16px;
+  align-content: start;
+  justify-content: start;
+  min-height: 100%;
+  padding: 24px;
+}
+
+.platformToolCard {
+  display: flex;
+  width: 160px;
+  height: 120px;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  color: #334155;
+  text-align: center;
+  text-decoration: none;
+  background: var(--platformSurface);
+  border: 1px solid var(--platformBorder);
+  border-radius: 10px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.025);
+  transition: color 180ms ease-out, border-color 180ms ease-out,
+    box-shadow 180ms ease-out, transform 180ms ease-out;
+}
+
+.platformWorkspaceCard {
+  display: flex;
+  width: 160px;
+  min-height: 120px;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px;
+  color: #334155;
+  text-align: center;
+  background: var(--platformSurface);
+  border: 1px solid var(--platformBorder);
+  border-radius: 10px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.025);
+}
+
+.platformWorkspaceName {
+  width: 100%;
+  overflow: hidden;
+  color: var(--platformMuted);
+  font-size: 12px;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.platformWorkspaceAction {
+  min-height: 27px;
+  padding: 4px 8px;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 560;
+  background: var(--platformBlueSoft);
+  border: 1px solid #dbeafe;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: color 160ms ease-out, background 160ms ease-out,
+    border-color 160ms ease-out;
+}
+
+.platformWorkspaceAction:hover:not(:disabled) {
+  color: #1e40af;
+  background: #dbeafe;
+  border-color: #bfdbfe;
+}
+
+.platformWorkspaceAction:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.platformWorkspaceMessage {
+  display: -webkit-box;
+  width: 100%;
+  overflow: hidden;
+  color: #b45309;
+  font-size: 11px;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.platformToolCard:hover {
+  color: #1d4ed8;
+  border-color: #bfdbfe;
+  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.08);
+  transform: translateY(-2px);
+}
+
+.platformToolIcon {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  color: var(--platformBlue);
+  background: var(--platformBlueSoft);
+  border: 1px solid #dbeafe;
+  border-radius: 10px;
+}
+
+.platformToolName {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 570;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.platformStatusState {
+  display: flex;
+  min-height: calc(100vh - 40px);
+  min-height: calc(100dvh - 40px);
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 12px;
+  padding: 24px;
+  color: var(--platformMuted);
+  font-size: 14px;
+  text-align: center;
+}
+
+.platformStatusState strong {
+  color: #334155;
+  font-size: 16px;
+  font-weight: 620;
+}
+
+.platformStatusIcon {
+  width: 40px;
+  height: 40px;
+  padding: 9px;
+  color: #64748b;
+  background: #f1f5f9;
+  border: 1px solid var(--platformBorder);
+  border-radius: 12px;
+}
+
+.platformLoadingIcon {
+  width: 26px;
+  height: 26px;
+  color: var(--platformBlue);
+  animation: platformLoadingSpin 850ms linear infinite;
+}
+
+@keyframes platformLoadingSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.platformPrimaryButton {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  margin-top: 2px;
+  padding: 8px 13px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 570;
+  text-decoration: none;
+  background: var(--platformBlue);
+  border: 1px solid var(--platformBlue);
+  border-radius: 9px;
+  cursor: pointer;
+  transition: background 160ms ease-out, transform 160ms ease-out;
+}
+
+.platformPrimaryButton:hover {
+  background: #1d4ed8;
+  transform: translateY(-1px);
+}
+
+@media (max-width: 767px) {
+  .platformShell {
+    min-height: 420px;
+  }
+
+  .platformSidebar,
+  .platformSidebarCollapsed {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 40;
+    width: min(86vw, 288px);
+    max-width: 288px;
+    flex-basis: auto;
+    transform: translateX(-102%);
+    transition: transform 210ms cubic-bezier(0.22, 1, 0.36, 1);
+    will-change: transform;
+    box-shadow: 16px 0 40px rgba(15, 23, 42, 0.15);
+  }
+
+  .platformSidebarMobileOpen {
+    transform: translateX(0);
+  }
+
+  .platformSidebarCollapsed .platformSidebarHeader {
+    flex-direction: row;
+    min-height: 64px;
+  }
+
+  .platformSidebarCollapsed .platformBrand {
+    flex: 1;
+  }
+
+  .platformSidebarCollapsed .platformBrandText,
+  .platformSidebarCollapsed .platformSidebarLabel,
+  .platformSidebarCollapsed .platformToolbarChevron {
+    display: initial;
+  }
+
+  .platformSidebarCollapsed .platformSidebarItem {
+    justify-content: flex-start;
+    padding-inline: 10px;
+  }
+
+  .platformSidebarCollapsed .platformModuleItem {
+    padding-left: 19px;
+  }
+
+  .platformDesktopSidebarToggle {
+    display: none;
+  }
+
+  .platformMobileSidebarClose,
+  .platformMobileMenuButton {
+    display: grid;
+  }
+
+  .platformMobileOverlay {
+    display: block;
+  }
+
+  .platformMobileOverlayVisible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .platformTabsHeader {
+    flex-basis: 44px;
+    height: 44px;
+  }
+
+  .platformMobileMenuButton {
+    width: 44px;
+    height: 44px;
+    border: 0;
+    border-right: 1px solid #edf1f6;
+    border-radius: 0;
+  }
+
+  .platformTab {
+    height: 44px;
+  }
+
+  .platformTabClose {
+    opacity: 1;
+  }
+
+  .platformHomeGrid {
+    grid-template-columns: repeat(auto-fill, minmax(148px, 160px));
+    gap: 12px;
+    padding: 16px;
+  }
+
+  .platformToolCard {
+    width: 100%;
+    min-width: 148px;
+  }
+
+  .platformStatusState {
+    min-height: calc(100vh - 44px);
+    min-height: calc(100dvh - 44px);
+  }
+}
+
+@media (max-width: 359px) {
+  .platformHomeGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .platformToolCard {
+    max-width: 160px;
+  }
+}

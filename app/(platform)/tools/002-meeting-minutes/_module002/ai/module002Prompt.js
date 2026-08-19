@@ -1,6 +1,8 @@
 import {
   module002AiResultSchema,
+  module002IsValidSpeechLength,
   module002SingleSpeechResultSchema,
+  module002SpeechLengthFieldId,
 } from "../domain/module002Schemas";
 
 export const module002RequiredPromptVariables = Object.freeze([
@@ -30,6 +32,21 @@ export function module002GetStandardProtocolText(
 
 export const module002StandardProtocolText = module002GetStandardProtocolText();
 
+/** 返回支委会单份材料使用的固定 JSON 协议说明。 */
+export function module002GetCommitteeProtocolText(
+  module002IdentityField = "serialNumber",
+) {
+  const module002IdentifierExample = module002IdentityField === "serialNumber"
+    ? "人物卡序号"
+    : "stable-person-id";
+  return `请仅输出 json 对象，并严格使用以下字段和层级：
+{
+  "secretaryImplementation":"书记的贯彻落实意见",
+  "speeches":[{"${module002IdentityField}":"${module002IdentifierExample}","name":"姓名","content":"委员交流发言"}],
+  "secretaryClosing":"书记最后发言"
+}`;
+}
+
 /** 检查 Prompt 中必需变量和固定协议字段是否完好。 */
 export function module002ValidatePrompt(module002Prompt) {
   const module002Errors = [];
@@ -47,6 +64,19 @@ export function module002ValidatePrompt(module002Prompt) {
     (module002Field) => {
       if (!module002Prompt.includes(`"${module002Field}"`)) {
         module002Errors.push(`固定 JSON 协议缺少字段 “${module002Field}”`);
+      }
+    },
+  );
+  return module002Errors;
+}
+
+/** 校验支委会 Prompt 额外需要的书记双段发言字段。 */
+export function module002ValidateCommitteePrompt(module002Prompt) {
+  const module002Errors = module002ValidatePrompt(module002Prompt);
+  ["secretaryImplementation", "secretaryClosing"].forEach(
+    (module002Field) => {
+      if (!module002Prompt.includes(`"${module002Field}"`)) {
+        module002Errors.push(`支委会 Prompt 缺少字段 “${module002Field}”`);
       }
     },
   );
@@ -80,6 +110,12 @@ export function module002SerializePersonCards(
         .filter((module002Field) => !["serialNumber", "name"].includes(module002Field.id))
         .forEach((module002Field) => {
           const module002Value = module002Person.values[module002Field.id]?.trim();
+          if (
+            module002Field.id === module002SpeechLengthFieldId
+            && !module002IsValidSpeechLength(module002Value)
+          ) {
+            return;
+          }
           if (module002Value) module002Lines.push(`${module002Field.label}：${module002Value}`);
         });
       return module002Lines.join("\n");
@@ -134,6 +170,33 @@ export function module002ValidateAiResult({
       name: module002Speech.name,
       content: module002Speech.content,
     })),
+  };
+}
+
+/** 校验支委会单份材料的书记双段发言和委员发言，拒绝任何不完整回填。 */
+export function module002ValidateCommitteeAiResult({
+  module002RawResult,
+  module002CommitteeMembers,
+  module002IdentityField = "serialNumber",
+}) {
+  if (
+    !module002RawResult
+    || typeof module002RawResult.secretaryImplementation !== "string"
+    || !module002RawResult.secretaryImplementation.trim()
+    || typeof module002RawResult.secretaryClosing !== "string"
+    || !module002RawResult.secretaryClosing.trim()
+  ) {
+    throw new Error("支委会返回缺少书记贯彻落实意见或书记最后发言");
+  }
+  const module002MemberResult = module002ValidateAiResult({
+    module002RawResult: { speeches: module002RawResult.speeches ?? [] },
+    module002Speakers: module002CommitteeMembers,
+    module002IdentityField,
+  });
+  return {
+    secretaryImplementation: module002RawResult.secretaryImplementation.trim(),
+    memberSpeeches: module002MemberResult.speeches,
+    secretaryClosing: module002RawResult.secretaryClosing.trim(),
   };
 }
 

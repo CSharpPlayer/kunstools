@@ -303,12 +303,46 @@
   min-width: 2em;
 }
 
-.module002DocumentBlock[data-module-type="topicDetails"] .module002ProseMirror p[data-module002-topic-detail-title="true"] {
+.module002DocumentBlock[data-module-type="topicDetails"] .module002ProseMirror p[data-module002-topic-detail-title="true"],
+.module002DocumentBlock[data-module-type="topicDetails"] .module002ProseMirror p[data-module002-topic-detail-level="2"] {
   font-family: "黑体", "SimHei", sans-serif;
   font-size: 16pt;
   font-weight: 400;
   text-align: left;
   text-indent: 2em;
+}
+
+.module002DocumentBlock[data-module-type="topicDetails"] .module002ProseMirror p[data-module002-topic-detail-level="3"] {
+  font-family: "楷体_GB2312", "KaiTi", "STKaiti", serif;
+  font-size: 16pt;
+  font-weight: 400;
+  text-align: left;
+  text-indent: 2em;
+}
+
+.module002DocumentBlock[data-module-type="topicDetails"] .module002ProseMirror p[data-module002-committee-secretary-convey="true"] {
+  text-align: center;
+  text-indent: 0;
+}
+
+.module002CommitteeSourceTitle {
+  display: grid;
+  gap: 3px;
+  margin-top: 8px;
+  color: #536273;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.module002CommitteeSourceTitle input {
+  min-width: 100%;
+}
+
+.module002CommitteeSpeakerHint {
+  margin: 8px 0;
+  color: #5a6878;
+  font-size: 13px;
+  line-height: 1.65;
 }
 
 .module002ResizeHandle {
@@ -339,7 +373,7 @@
 .module002RightTopActions {
   display: grid;
   flex: 0 0 auto;
-  grid-template-columns: 1fr 1.35fr 0.9fr 34px;
+  grid-template-columns: 0.9fr 1.15fr 1.4fr 0.8fr 34px;
   gap: 5px;
   padding: 8px;
   background: #fff;
@@ -750,6 +784,39 @@
   background: #e7eaf0;
 }
 
+.module002ExportControl {
+  position: relative;
+  min-width: 0;
+}
+
+.module002ExportControl > .module002ExportButton {
+  width: 100%;
+}
+
+.module002ExportMenu {
+  position: absolute;
+  right: 0;
+  bottom: 100%;
+  z-index: 8;
+  display: grid;
+  min-width: 196px;
+  gap: 7px;
+  padding: 9px 10px;
+  color: #374151;
+  font-size: 12px;
+  background: #fff;
+  border: 1px solid #d9dee6;
+  border-radius: 8px;
+  box-shadow: 0 10px 25px rgba(16, 24, 40, 0.14);
+}
+
+.module002ExportMenu label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+}
+
 .module002EmptyEditor {
   display: grid;
   flex: 1;
@@ -996,6 +1063,81 @@
 
 .module002DialogWide {
   width: min(1040px, calc(100vw - 64px));
+}
+
+.module002ExportTemplateGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.module002ExportTemplateCard {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  padding: 13px;
+  background: #fafbfc;
+  border: 1px solid #e1e5eb;
+  border-radius: 9px;
+}
+
+.module002ExportTemplateCard h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.module002ExportTemplateCard p,
+.module002ExportTemplateCard small {
+  margin: 0;
+  color: #697386;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.module002ExportTemplateCardHeader,
+.module002ExportTemplateCardActions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 7px;
+}
+
+.module002ExportTemplateCardActions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.module002ExportTemplateCardActions .module002SecondaryButton {
+  min-height: 31px;
+  padding: 5px 7px;
+  font-size: 11px;
+}
+
+.module002ExportTemplateCardActions input[type="file"] {
+  display: none;
+}
+
+.module002TemplateMappingList {
+  display: grid;
+  gap: 8px;
+}
+
+.module002TemplateMappingList label {
+  display: grid;
+  gap: 4px;
+  color: #4b5563;
+  font-size: 12px;
+  font-weight: 620;
+}
+
+.module002ExportTemplateMessage {
+  margin: 12px 0 0;
+  padding: 8px 10px;
+  color: #175f3a;
+  font-size: 12px;
+  background: #f1fbf6;
+  border: 1px solid #cfeadb;
+  border-radius: 7px;
 }
 
 .module002DialogHeader {
@@ -1270,6 +1412,19 @@
 
 .module002TemplateHeaderFields select {
   width: 145px;
+}
+
+.module002TemplatePrompt {
+  display: grid;
+  gap: 4px;
+  margin: 14px 0;
+  color: #697384;
+  font-size: 12px;
+}
+
+.module002TemplatePrompt textarea {
+  min-height: 180px;
+  resize: vertical;
 }
 
 .module002AddModuleRow {

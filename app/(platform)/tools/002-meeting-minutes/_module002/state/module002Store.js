@@ -1,5 +1,9 @@
 import { create } from "zustand";
 import { module002CreateDraft, module002CreateId } from "../domain/module002Factories";
+import {
+  module002GetCommitteeSpeechKey,
+  module002IsCommitteeMeeting,
+} from "../domain/module002CommitteeMeeting";
 
 /** 清除由右侧权威配置影响的编辑器覆盖，避免双份状态循环覆盖。 */
 function module002ClearBlockOverrides(module002Draft, module002Types) {
@@ -103,7 +107,9 @@ export const useModule002Store = create((module002Set, module002Get) => ({
           ...module002Draft,
           meetingInfo: { ...module002Draft.meetingInfo, ...module002Patch },
         },
-        ["mainTitle", "meetingSummary", "hostOpening", "groupSpeeches", "hostClosing"],
+        module002IsCommitteeMeeting(module002Draft)
+          ? ["mainTitle", "meetingSummary", "topicDetails"]
+          : ["mainTitle", "meetingSummary", "hostOpening", "groupSpeeches", "hostClosing"],
       ),
     );
   },
@@ -113,9 +119,52 @@ export const useModule002Store = create((module002Set, module002Get) => ({
     module002Get().module002UpdateDraft((module002Draft) =>
       module002ClearBlockOverrides(
         { ...module002Draft, topics: module002Topics },
-        ["topicSummary", "topicDetails"],
+        module002IsCommitteeMeeting(module002Draft)
+          ? ["topicDetails"]
+          : ["topicSummary", "topicDetails"],
       ),
     );
+  },
+
+  /** 经用户确认切换会议类型，保留基本信息、人员和材料并重建正文快照。 */
+  module002ChangeMeetingType(module002MeetingType) {
+    const module002Config = module002Get().module002Config;
+    const module002CurrentDraft = module002Get().module002Draft;
+    const module002NextTemplate = module002Config.templates.find(
+      (module002Template) =>
+        module002Template.branchId === module002CurrentDraft.branchId
+        && module002Template.meetingType === module002MeetingType,
+    );
+    if (!module002NextTemplate) {
+      throw new Error("当前党支部尚未配置所选会议类型");
+    }
+    const module002NextDraft = module002CreateDraft({
+      module002Template: module002NextTemplate,
+      module002DocumentFormat: module002Config.documentFormat,
+      module002People: module002Config.people,
+    });
+    const module002CurrentName = module002CurrentDraft.meetingInfo.meetingName.trim();
+    const module002ShouldReplaceMeetingName =
+      !module002CurrentName
+      || module002CurrentName === module002CurrentDraft.templateSnapshot.name;
+    module002NextDraft.meetingInfo = {
+      ...module002CurrentDraft.meetingInfo,
+      meetingName: module002ShouldReplaceMeetingName
+        ? module002NextTemplate.name
+        : module002CurrentDraft.meetingInfo.meetingName,
+      meetingType: module002NextTemplate.meetingType,
+    };
+    module002NextDraft.topics = structuredClone(module002CurrentDraft.topics);
+    module002NextDraft.speakerPersonIds = structuredClone(
+      module002CurrentDraft.speakerPersonIds,
+    );
+    module002NextDraft.examplePeopleConfirmed =
+      module002CurrentDraft.examplePeopleConfirmed;
+    module002Set({
+      module002Draft: module002ReviseDraft(module002NextDraft),
+      module002DraftDirty: true,
+      module002ActiveSection: "meetingInfo",
+    });
   },
 
   /** 更新发言人顺序和选择。 */
@@ -148,7 +197,10 @@ export const useModule002Store = create((module002Set, module002Get) => ({
           .replace(/会议记录\s*$/, "")
           .trim();
       }
-      if (module002Block.moduleType === "topicSummary") {
+      if (
+        module002Block.moduleType === "topicSummary"
+        && !module002IsCommitteeMeeting(module002Draft)
+      ) {
         const module002Titles = module002Content.text
           .split("\n")
           .map((module002Line) => module002Line.replace(/^\s*\d+[.．、]\s*/, "").trim())
@@ -254,6 +306,40 @@ export const useModule002Store = create((module002Set, module002Get) => ({
         ["groupSpeeches"],
       ),
     );
+  },
+
+  /** 回填支委会每份材料的书记双段发言与委员发言，并清除旧正文覆盖。 */
+  module002ApplyCommitteeAiResults(module002Results) {
+    module002Get().module002UpdateDraft((module002Draft) => {
+      const module002Speeches = { ...module002Draft.speeches };
+      module002Results.forEach((module002Result) => {
+        module002Speeches[
+          module002GetCommitteeSpeechKey(
+            module002Result.sourceId,
+            "secretaryImplementation",
+          )
+        ] = module002Result.secretaryImplementation;
+        module002Result.memberSpeeches.forEach((module002Speech) => {
+          module002Speeches[
+            module002GetCommitteeSpeechKey(
+              module002Result.sourceId,
+              "member",
+              module002Speech.personId,
+            )
+          ] = module002Speech.content;
+        });
+        module002Speeches[
+          module002GetCommitteeSpeechKey(
+            module002Result.sourceId,
+            "secretaryClosing",
+          )
+        ] = module002Result.secretaryClosing;
+      });
+      return module002ClearBlockOverrides(
+        { ...module002Draft, speeches: module002Speeches },
+        ["topicDetails"],
+      );
+    });
   },
 
   /** 新建自定义人物字段。 */

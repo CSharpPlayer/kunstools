@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   module002BuildDocumentBlocks,
   module002FormatTopicDetailOrdinal,
+  module002GetExportChecks,
   module002GetOrderedSpeakers,
 } from "./module002Document";
+import { module002GetCommitteeSpeechKey } from "./module002CommitteeMeeting";
 import {
   module002CreateDraft,
   module002CreateInitialWorkspace,
@@ -62,6 +64,8 @@ describe("module002 document blocks", () => {
       module002DocumentFormat: module002Workspace.documentFormat,
       module002People: module002Workspace.people,
     });
+    module002Draft.meetingInfo.time = "上午9:00";
+    module002Draft.meetingInfo.location = "会议室";
     module002Draft.meetingInfo.hostPersonId = "person-2";
     module002Draft.speakerPersonIds = ["person-3", "person-1"];
     module002Draft.speeches = {
@@ -112,5 +116,70 @@ describe("module002 document blocks", () => {
     ]);
     expect(module002Summary.editorJson.content[1].content[0].text).toContain("时间：");
     expect(module002Summary.editorJson.content[1].content[2].text).toBe("地点：会议室");
+  });
+
+  it("按第一议题规则生成支委会固定大节、逐份三级标题和书记收尾", () => {
+    const module002Workspace = module002CreateInitialWorkspace();
+    const module002Template = module002Workspace.templates.find(
+      (module002Item) => module002Item.name === "支委会" && module002Item.branchId === module002Workspace.branches[2].id,
+    );
+    const module002Draft = module002CreateDraft({
+      module002Template,
+      module002DocumentFormat: module002Workspace.documentFormat,
+      module002People: module002Workspace.people,
+    });
+    module002Draft.meetingInfo.time = "上午9:00";
+    module002Draft.meetingInfo.location = "会议室";
+    module002Draft.meetingInfo.recorderPersonId = module002Workspace.people[1].id;
+    const module002Secretary = module002Workspace.people[0];
+    const module002CommitteeMembers = [
+      module002Workspace.people[1],
+      module002Workspace.people[2],
+    ];
+    module002Draft.topics = [
+      {
+        id: "topic-first",
+        title: "第一议题",
+        order: 0,
+        firstTopicLocked: true,
+        sources: [{ id: "source-first", fileName: "第一议题材料.docx", title: "学习重要讲话", selectedText: "第一议题原文" }],
+      },
+      {
+        id: "topic-second",
+        title: "学习计划",
+        order: 1,
+        firstTopicLocked: false,
+        sources: [{ id: "source-second", fileName: "学习计划.docx", title: "研究学习计划", selectedText: "第二议题原文" }],
+      },
+    ];
+    ["source-first", "source-second"].forEach((module002SourceId) => {
+      module002Draft.speeches[module002GetCommitteeSpeechKey(module002SourceId, "secretaryImplementation")] = "提出贯彻落实意见。";
+      module002CommitteeMembers.forEach((module002CommitteeMember) => {
+        module002Draft.speeches[module002GetCommitteeSpeechKey(module002SourceId, "member", module002CommitteeMember.id)] = "发表讨论意见。";
+      });
+      module002Draft.speeches[module002GetCommitteeSpeechKey(module002SourceId, "secretaryClosing")] = "作最后发言。";
+    });
+
+    const module002Details = module002BuildDocumentBlocks(
+      module002Draft,
+      module002Workspace,
+    ).find((module002Block) => module002Block.moduleType === "topicDetails");
+
+    expect(module002Details.text).toContain("一、传达学习习近平总书记系列重要讲话和重要会议精神");
+    expect(module002Details.text).toContain("（一）学习重要讲话");
+    expect(module002Details.text).toContain(`党支部书记${module002Secretary.name}同志传达。`);
+    expect(module002Details.text).toContain("二、研究确定本月三会一课学习计划事宜");
+    expect(module002Details.text).toContain("（一）研究学习计划");
+    expect(module002Details.text).toContain(`${module002Secretary.name}：今天的议题就这么多，散会！`);
+    expect(module002Details.editorJson.content[0].attrs).toEqual({
+      module002TopicDetailLevel: 2,
+    });
+    expect(module002Details.editorJson.content[1].attrs).toEqual({
+      module002TopicDetailLevel: 3,
+    });
+    expect(module002Details.editorJson.content[2].attrs).toEqual({
+      module002CommitteeSecretaryConvey: true,
+    });
+    expect(module002GetExportChecks(module002Draft, module002Workspace)).toEqual([]);
   });
 });

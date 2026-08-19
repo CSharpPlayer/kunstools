@@ -34,8 +34,10 @@ async function module002ReadLatestValid({
     );
     if (!module002Text) continue;
     try {
+      const module002Raw = JSON.parse(module002Text);
       module002Candidates.push({
         name: module002Name,
+        sourceFormatVersion: module002Raw.formatVersion,
         value: module002Parse(module002Text),
       });
     } catch {
@@ -61,7 +63,19 @@ export async function module002OpenOrCreateWorkspace(module002DirectoryHandle) {
   });
 
   if (module002Loaded) {
-    return { config: module002Loaded.value, recovered: module002Loaded.name.includes("recovery") };
+    const module002WasMigrated =
+      module002Loaded.sourceFormatVersion !== module002Loaded.value.formatVersion;
+    const module002Config = module002WasMigrated
+      ? await module002SaveConfig(
+          module002DirectoryHandle,
+          module002Loaded.value,
+          false,
+        )
+      : module002Loaded.value;
+    return {
+      config: module002Config,
+      recovered: module002Loaded.name.includes("recovery"),
+    };
   }
   if (module002InvalidNames.length) {
     throw new Error("工作区配置已损坏；原文件已保留，请使用恢复副本或配置 ZIP 修复");
@@ -93,7 +107,7 @@ export async function module002SaveConfig(
     module002Validate: module002ParseWorkspaceConfig,
   });
   const module002Manifest = module002ManifestSchema.parse({
-    formatVersion: 1,
+    formatVersion: module002NextConfig.formatVersion,
     workspaceId: module002NextConfig.workspaceId,
     createdAt: module002NextConfig.createdAt,
     updatedAt: module002Now,

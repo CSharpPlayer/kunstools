@@ -93,6 +93,35 @@ describe("module002 DOCX export", () => {
     expect(module002Xml).toContain("地点：第一会议室");
   });
 
+  it("将支委会固定的党支部书记传达语居中导出", async () => {
+    const module002Workspace = module002CreateInitialWorkspace();
+    const module002CommitteeTemplate = module002Workspace.templates.find(
+      (module002Template) =>
+        module002Template.name === "支委会"
+        && module002Template.branchId === module002Workspace.branches[2].id,
+    );
+    const module002Draft = module002CreateDraft({
+      module002Template: module002CommitteeTemplate,
+      module002DocumentFormat: module002Workspace.documentFormat,
+      module002People: module002Workspace.people,
+    });
+    module002Draft.topics = [{
+      id: "committee-source-topic",
+      title: "第一议题",
+      order: 0,
+      firstTopicLocked: true,
+      sources: [{ id: "committee-source", title: "学习材料", selectedText: "合成材料正文" }],
+    }];
+
+    const module002Blob = await module002BuildDocx(module002Draft, module002Workspace);
+    const module002Xml = await module002ReadDocxXml(module002Blob, "word/document.xml");
+    const module002ConveyParagraph = module002Xml.match(
+      /<w:p>(?:(?!<\/w:p>)[\s\S])*?党支部书记李万庄同志传达。(?:(?!<\/w:p>)[\s\S])*?<\/w:p>/,
+    )?.[0];
+
+    expect(module002ConveyParagraph).toContain('<w:jc w:val="center"/>');
+  });
+
   it("把 A4、页边距、固定行距、连续空格和编辑器局部格式写入 OOXML", async () => {
     const module002Workspace = module002CreateInitialWorkspace();
     const module002Draft = module002CreateDraft({

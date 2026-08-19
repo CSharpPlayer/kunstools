@@ -3,6 +3,7 @@
 import { HardDrive, RefreshCcw } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import PlatformDeepSeekBalanceDashboard from "./dashboard/platformDeepSeekBalanceDashboard";
 import { platformModuleList } from "./platformModuleCatalog";
 import {
   platformChooseWorkspaceDirectory,
@@ -154,65 +155,68 @@ export default function PlatformHomeContent() {
     platformWorkspaceStatus === "permissionRequired";
 
   return (
-    <section className="platformHomeGrid" aria-label="工具入口">
-      <article className="platformWorkspaceCard">
-        <span className="platformToolIcon" aria-hidden="true">
-          {platformWorkspacePermissionRequired ? (
-            <RefreshCcw size={30} strokeWidth={1.8} />
-          ) : (
-            <HardDrive size={30} strokeWidth={1.8} />
-          )}
-        </span>
-        <span className="platformToolName">本地工作区</span>
-        <span className="platformWorkspaceName" title={platformWorkspaceName}>
-          {platformWorkspaceReady
-            ? platformWorkspaceName
-            : platformWorkspaceBusy
-              ? "正在检查"
-              : platformWorkspacePermissionRequired
-                ? "需要重新授权"
-                : "未选择"}
-        </span>
-        <button
-          className="platformWorkspaceAction"
-          disabled={platformWorkspaceBusy || platformWorkspaceStatus === "unsupported"}
-          onClick={
-            platformWorkspacePermissionRequired
-              ? platformRestoreWorkspacePermission
-              : platformSelectWorkspace
-          }
-          type="button"
-        >
-          {platformWorkspacePermissionRequired
-            ? "重新授权"
-            : platformWorkspaceReady
-              ? "更换文件夹"
-              : "选择文件夹"}
-        </button>
-        {platformWorkspaceMessage ? (
-          <span className="platformWorkspaceMessage" role="status">
-            {platformWorkspaceMessage}
+    <div className="platformHomeContent">
+      <PlatformDeepSeekBalanceDashboard />
+      <section className="platformHomeGrid" aria-label="工具入口">
+        <article className="platformWorkspaceCard">
+          <span className="platformToolIcon" aria-hidden="true">
+            {platformWorkspacePermissionRequired ? (
+              <RefreshCcw size={30} strokeWidth={1.8} />
+            ) : (
+              <HardDrive size={30} strokeWidth={1.8} />
+            )}
           </span>
-        ) : null}
-      </article>
-      {platformModuleList.map((platformModule) => {
-        const PlatformModuleIcon = platformModule.icon;
-
-        return (
-          <Link
-            className="platformToolCard"
-            href={platformModule.path}
-            key={platformModule.id}
-            scroll={false}
-            title={platformModule.name}
+          <span className="platformToolName">本地工作区</span>
+          <span className="platformWorkspaceName" title={platformWorkspaceName}>
+            {platformWorkspaceReady
+              ? platformWorkspaceName
+              : platformWorkspaceBusy
+                ? "正在检查"
+                : platformWorkspacePermissionRequired
+                  ? "需要重新授权"
+                  : "未选择"}
+          </span>
+          <button
+            className="platformWorkspaceAction"
+            disabled={platformWorkspaceBusy || platformWorkspaceStatus === "unsupported"}
+            onClick={
+              platformWorkspacePermissionRequired
+                ? platformRestoreWorkspacePermission
+                : platformSelectWorkspace
+            }
+            type="button"
           >
-            <span className="platformToolIcon" aria-hidden="true">
-              <PlatformModuleIcon size={30} strokeWidth={1.8} />
+            {platformWorkspacePermissionRequired
+              ? "重新授权"
+              : platformWorkspaceReady
+                ? "更换文件夹"
+                : "选择文件夹"}
+          </button>
+          {platformWorkspaceMessage ? (
+            <span className="platformWorkspaceMessage" role="status">
+              {platformWorkspaceMessage}
             </span>
-            <span className="platformToolName">{platformModule.name}</span>
-          </Link>
-        );
-      })}
-    </section>
+          ) : null}
+        </article>
+        {platformModuleList.map((platformModule) => {
+          const PlatformModuleIcon = platformModule.icon;
+
+          return (
+            <Link
+              className="platformToolCard"
+              href={platformModule.path}
+              key={platformModule.id}
+              scroll={false}
+              title={platformModule.name}
+            >
+              <span className="platformToolIcon" aria-hidden="true">
+                <PlatformModuleIcon size={30} strokeWidth={1.8} />
+              </span>
+              <span className="platformToolName">{platformModule.name}</span>
+            </Link>
+          );
+        })}
+      </section>
+    </div>
   );
 }

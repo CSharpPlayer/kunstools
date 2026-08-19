@@ -30,11 +30,17 @@ import {
   module002ParseSourceFile,
 } from "../parser/module002FileParser";
 import {
+  module002GetCommitteeProtocolText,
   module002GetPromptIdentityField,
   module002RequiredPromptVariables,
   module002SerializePersonCards,
   module002StandardProtocolText,
 } from "../ai/module002Prompt";
+import {
+  module002CommitteeMeetingType,
+  module002IsCommitteeMeeting,
+  module002PartyCongressMeetingType,
+} from "../domain/module002CommitteeMeeting";
 
 /** 返回移动一个列表项后的新数组。 */
 function module002MoveItem(module002Items, module002From, module002To) {
@@ -104,9 +110,11 @@ export default function Module002RightPanel({
   module002Collapsed,
   module002OnCollapse,
   module002OnOpenFormat,
+  module002OnOpenExportTemplates,
   module002OnOpenTemplates,
   module002OnOpenPeople,
   module002OnMeetingInfo,
+  module002OnChangeMeetingType,
   module002OnSetTopics,
   module002OnSetSpeakers,
   module002OnUpdateDraft,
@@ -123,13 +131,19 @@ export default function Module002RightPanel({
   const [module002OpenSteps, setModule002OpenSteps] = useState(new Set(["meetingInfo", "topics"]));
   const [module002ParsingCount, setModule002ParsingCount] = useState(0);
   const [module002ParseProgress, setModule002ParseProgress] = useState(new Map());
+  const [module002ExportMenuOpen, setModule002ExportMenuOpen] = useState(false);
+  const [module002ExportNotice, setModule002ExportNotice] = useState(false);
+  const [module002ExportAttendance, setModule002ExportAttendance] = useState(false);
   const module002AbortControllers = useRef(new Map());
   const module002RemovedSourceIds = useRef(new Set());
+  const module002SourceTitleOverrides = useRef(new Map());
+  const module002LatestTopics = useRef(module002Draft.topics);
   const module002BranchPeople = useMemo(() => module002GetBranchPeople(module002Config, module002Draft.branchId), [module002Config, module002Draft.branchId]);
   const module002OrderedSpeakers = useMemo(() => module002GetOrderedSpeakers(module002Draft, module002Config), [module002Config, module002Draft]);
   const module002PromptIdentityField = module002GetPromptIdentityField(
     module002Draft.prompt,
   );
+  const module002IsCommitteeDraft = module002IsCommitteeMeeting(module002Draft);
   const module002GenerationChecks = module002GetGenerationChecks(module002Draft, module002Config);
   const module002ExportChecks = module002GetExportChecks(module002Draft, module002Config);
   if (!module002Models.includes(module002Config.settings.preferredModel)) {
@@ -143,12 +157,30 @@ export default function Module002RightPanel({
   const module002PersonMap = new Map(module002Config.people.map((item) => [item.id, item]));
 
   useEffect(() => {
+    module002LatestTopics.current = module002Draft.topics;
+  }, [module002Draft.topics]);
+
+  /** 同步提交议题并立刻更新异步解析使用的最新快照。 */
+  function module002CommitTopics(module002Topics) {
+    module002LatestTopics.current = module002Topics;
+    module002OnSetTopics(module002Topics);
+  }
+
+  useEffect(() => {
     if (!module002ActiveSection) return;
     const module002SectionMap = { meetingInfo: "meetingInfo", topics: "topics", speakers: "speakers", people: "speakers" };
     const module002Step = module002SectionMap[module002ActiveSection];
     if (module002Step) {
-      setModule002OpenSteps((module002Previous) => new Set([...module002Previous, module002Step]));
-      window.setTimeout(() => document.getElementById(`module002-${module002Step}`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
+      const module002ScrollTimer = window.setTimeout(() => {
+        setModule002OpenSteps(
+          (module002Previous) => new Set([...module002Previous, module002Step]),
+        );
+        document.getElementById(`module002-${module002Step}`)?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      }, 0);
+      return () => window.clearTimeout(module002ScrollTimer);
     }
   }, [module002ActiveSection]);
 
@@ -159,6 +191,21 @@ export default function Module002RightPanel({
       if (module002Next.has(module002Step)) module002Next.delete(module002Step);
       else module002Next.add(module002Step);
       return module002Next;
+    });
+  }
+
+  /** 触屏设备第一次点按导出按钮时仅展开附件选项，第二次才执行导出。 */
+  function module002HandleExportPointerDown(module002Event) {
+    if (module002Event.pointerType !== "touch" || module002ExportMenuOpen) return;
+    module002Event.preventDefault();
+    setModule002ExportMenuOpen(true);
+  }
+
+  /** 将当前勾选的通知、签到簿选项与会议记录一起交给导出命令。 */
+  function module002HandleExport() {
+    module002OnExport({
+      notice: module002ExportNotice,
+      attendance: module002ExportAttendance,
     });
   }
 
@@ -191,6 +238,19 @@ export default function Module002RightPanel({
       }));
   }
 
+  /** 将用户刚修改的三级标题合并回异步解析结果，避免解析完成覆盖手动标题。 */
+  function module002WithSourceTitleOverrides(module002Topics) {
+    return module002Topics.map((module002Topic) => ({
+      ...module002Topic,
+      sources: module002Topic.sources.map((module002Source) => ({
+        ...module002Source,
+        title:
+          module002SourceTitleOverrides.current.get(module002Source.id)
+          ?? module002Source.title,
+      })),
+    }));
+  }
+
   /** 切换参加状态，并自动维护缺席名单和主持/记录有效性。 */
   function module002ToggleAttendee(module002PersonId, module002Checked) {
     const module002Attendees = module002Checked
@@ -213,7 +273,7 @@ export default function Module002RightPanel({
     const module002ExistingCount = module002Draft.topics.reduce((total, topic) => total + topic.sources.length, 0);
     const module002AcceptedFiles = Array.from(module002Files).slice(0, module002MaximumFileCount - module002ExistingCount);
     if (!module002AcceptedFiles.length) return;
-    let module002Topics = structuredClone(module002Draft.topics);
+    let module002Topics = structuredClone(module002LatestTopics.current);
     const module002TargetIndex = module002Topics.findIndex((module002Topic) => module002Topic.id === module002TopicId);
     if (module002TargetIndex < 0) return;
     const module002Topic = module002Topics[module002TargetIndex];
@@ -222,7 +282,7 @@ export default function Module002RightPanel({
     for (const module002File of module002AcceptedFiles) {
       const module002FileType = module002GetSupportedFileType(module002File.name);
       if (!module002FileType) continue;
-      const module002Source = { id: module002CreateId("source"), fileName: module002File.name, fileType: module002FileType, status: "pending", selectedText: "", candidates: [], error: null };
+      const module002Source = { id: module002CreateId("source"), fileName: module002File.name, title: module002File.name.replace(/\.[^.]+$/, ""), fileType: module002FileType, status: "pending", selectedText: "", candidates: [], error: null };
       module002Topic.sources.push(module002Source);
       module002FirstSupportedFileName ??= module002File.name;
       module002Jobs.push({ module002File, module002SourceId: module002Source.id });
@@ -239,12 +299,17 @@ export default function Module002RightPanel({
       module002Topic.title = module002FirstSupportedFileName.replace(/\.[^.]+$/, "");
     }
     module002Topics = module002Topics.map((item, index) => ({ ...item, order: index }));
-    module002OnSetTopics(module002Topics);
+    module002CommitTopics(module002Topics);
     for (const module002Job of module002Jobs) {
       const module002Controller = new AbortController();
       module002AbortControllers.current.set(module002Job.module002SourceId, module002Controller);
       setModule002ParsingCount((value) => value + 1);
-      module002OnSetTopics(module002Topics.map((topic) => ({ ...topic, sources: topic.sources.map((source) => source.id === module002Job.module002SourceId ? { ...source, status: "parsing" } : source) })));
+      module002CommitTopics(module002PatchTopicSource(
+        module002LatestTopics.current,
+        module002TopicId,
+        module002Job.module002SourceId,
+        { status: "parsing" },
+      ));
       try {
         const module002Result = await module002ParseSourceFile({
           module002File: module002Job.module002File,
@@ -252,15 +317,37 @@ export default function Module002RightPanel({
           module002OnProgress: (module002Progress) =>
             module002SetSourceProgress(module002Job.module002SourceId, module002Progress),
         });
-        module002Topics = module002Topics.map((topic) => ({ ...topic, sources: topic.sources.map((source) => source.id === module002Job.module002SourceId ? { ...source, status: module002Result.needsSelection ? "needsSelection" : "ready", selectedText: module002Result.selectedText, candidates: module002Result.candidates.length ? module002Result.candidates : module002Result.paragraphs.slice(0, 30), error: null } : source) }));
+        module002CommitTopics(module002PatchTopicSource(
+          module002LatestTopics.current,
+          module002TopicId,
+          module002Job.module002SourceId,
+          {
+            status: module002Result.needsSelection ? "needsSelection" : "ready",
+            selectedText: module002Result.selectedText,
+            candidates: module002Result.candidates.length
+              ? module002Result.candidates
+              : module002Result.paragraphs.slice(0, 30),
+            error: null,
+          },
+        ));
       } catch (module002Error) {
-        module002Topics = module002Topics.map((topic) => ({ ...topic, sources: topic.sources.map((source) => source.id === module002Job.module002SourceId ? { ...source, status: "failed", error: module002Error.name === "AbortError" ? "已取消" : module002Error.message } : source) }));
+        module002CommitTopics(module002PatchTopicSource(
+          module002LatestTopics.current,
+          module002TopicId,
+          module002Job.module002SourceId,
+          {
+            status: "failed",
+            error: module002Error.name === "AbortError" ? "已取消" : module002Error.message,
+          },
+        ));
       } finally {
         module002AbortControllers.current.delete(module002Job.module002SourceId);
         module002SetSourceProgress(module002Job.module002SourceId, null);
         setModule002ParsingCount((value) => Math.max(0, value - 1));
-        module002Topics = module002WithoutRemovedSources(module002Topics);
-        module002OnSetTopics(module002Topics);
+        module002Topics = module002WithSourceTitleOverrides(
+          module002WithoutRemovedSources(module002LatestTopics.current),
+        );
+        module002CommitTopics(module002Topics);
       }
     }
   }
@@ -269,9 +356,9 @@ export default function Module002RightPanel({
   function module002RemoveSource(module002TopicId, module002SourceId) {
     module002RemovedSourceIds.current.add(module002SourceId);
     module002AbortControllers.current.get(module002SourceId)?.abort();
-    let module002Topics = module002Draft.topics.map((topic) => topic.id === module002TopicId ? { ...topic, sources: topic.sources.filter((source) => source.id !== module002SourceId) } : topic);
+    let module002Topics = module002LatestTopics.current.map((topic) => topic.id === module002TopicId ? { ...topic, sources: topic.sources.filter((source) => source.id !== module002SourceId) } : topic);
     module002Topics = module002Topics.filter((topic) => topic.sources.length || !topic.firstTopicLocked).map((topic, index) => ({ ...topic, order: index, firstTopicLocked: topic.sources.some((source) => source.fileName.includes("第一议题")) }));
-    module002OnSetTopics(module002Topics);
+    module002CommitTopics(module002Topics);
   }
 
   /** 用户重新选择本地文件后覆盖该材料的解析结果。 */
@@ -286,14 +373,15 @@ export default function Module002RightPanel({
     const module002Controller = new AbortController();
     module002AbortControllers.current.set(module002SourceId, module002Controller);
     setModule002ParsingCount((module002Value) => module002Value + 1);
-    module002OnSetTopics(
-      module002Draft.topics.map((module002Topic) => ({
+    module002CommitTopics(
+      module002LatestTopics.current.map((module002Topic) => ({
         ...module002Topic,
         sources: module002Topic.sources.map((module002Source) =>
           module002Source.id === module002SourceId
             ? {
                 ...module002Source,
                 fileName: module002File.name,
+                title: module002Source.title || module002File.name.replace(/\.[^.]+$/, ""),
                 fileType: module002FileType,
                 status: "parsing",
                 error: null,
@@ -310,9 +398,12 @@ export default function Module002RightPanel({
           module002SetSourceProgress(module002SourceId, module002Progress),
       });
       if (module002RemovedSourceIds.current.has(module002SourceId)) return;
-      module002OnSetTopics(
-        module002PatchTopicSource(module002Draft.topics, module002TopicId, module002SourceId, {
+      module002CommitTopics(
+        module002PatchTopicSource(module002LatestTopics.current, module002TopicId, module002SourceId, {
           fileName: module002File.name,
+          title:
+            module002SourceTitleOverrides.current.get(module002SourceId)
+            ?? module002File.name.replace(/\.[^.]+$/, ""),
           fileType: module002FileType,
           status: module002Result.needsSelection ? "needsSelection" : "ready",
           selectedText: module002Result.selectedText,
@@ -324,8 +415,8 @@ export default function Module002RightPanel({
       );
     } catch (module002Error) {
       if (module002RemovedSourceIds.current.has(module002SourceId)) return;
-      module002OnSetTopics(
-        module002PatchTopicSource(module002Draft.topics, module002TopicId, module002SourceId, {
+      module002CommitTopics(
+        module002PatchTopicSource(module002LatestTopics.current, module002TopicId, module002SourceId, {
           status: "failed",
           error:
             module002Error.name === "AbortError"
@@ -351,12 +442,14 @@ export default function Module002RightPanel({
       <div className="module002RightTopActions">
         <button onClick={module002OnOpenFormat} type="button"><FileText size={15} />文档格式</button>
         <button onClick={module002OnOpenTemplates} type="button"><Settings2 size={15} />配置党支部模板</button>
+        <button onClick={module002OnOpenExportTemplates} type="button"><FileText size={15} />通知和签到簿模板</button>
         <button onClick={module002OnOpenPeople} type="button"><Users size={15} />人物卡</button>
         <button aria-label="折叠配置区" onClick={module002OnCollapse} type="button"><PanelRightClose size={16} /></button>
       </div>
       <div className="module002RightScroll">
         <Module002Step module002Active={module002ActiveSection === "meetingInfo"} module002Id="meetingInfo" module002OnActivate={() => module002OnFocusSection("meetingInfo")} module002Open={module002OpenSteps.has("meetingInfo")} module002OnToggle={() => module002ToggleStep("meetingInfo")} module002Title="会议信息">
           <div className="module002FormGrid">
+            <label className="module002FullField">会议类型<select aria-label="会议类型" onChange={(event) => module002OnChangeMeetingType(event.target.value)} value={module002Draft.meetingInfo.meetingType}><option value={module002PartyCongressMeetingType}>党员大会</option><option value={module002CommitteeMeetingType}>支委会</option></select></label>
             <label className="module002FullField">会议名称<input onChange={(event) => module002OnMeetingInfo({ meetingName: event.target.value })} value={module002Draft.meetingInfo.meetingName} /></label>
             <label>日期<input onChange={(event) => module002OnMeetingInfo({ date: event.target.value })} type="date" value={module002Draft.meetingInfo.date} /></label>
             <label>具体时间<input onChange={(event) => module002OnMeetingInfo({ time: event.target.value })} placeholder="上午9:00" value={module002Draft.meetingInfo.time} /></label>
@@ -388,27 +481,26 @@ export default function Module002RightPanel({
         <Module002Step module002Active={module002ActiveSection === "topics"} module002Badge={module002ParsingCount ? `解析中 ${module002ParsingCount}` : `${module002Draft.topics.length} 项`} module002Id="topics" module002OnActivate={() => module002OnFocusSection("topics")} module002Open={module002OpenSteps.has("topics")} module002OnToggle={() => module002ToggleStep("topics")} module002Title="议题材料">
           <small className="module002FileLimits">请在对应议题内上传材料；最多 20 个文件，单个不超过 20MB，PDF 不超过 50 页。</small>
           {module002Draft.topics.map((topic, topicIndex) => <article className="module002TopicCard" key={topic.id}>
-            <div className="module002TopicHeader"><span>{topicIndex + 1}</span><div className="module002TopicTitleField"><input aria-label={`第 ${topicIndex + 1} 个议题标题`} onChange={(event) => module002OnSetTopics(module002Draft.topics.map((item) => item.id === topic.id ? { ...item, title: event.target.value } : item))} value={topic.title} /><label className="module002TopicUploadButton" title="上传本议题材料"><FilePlus2 size={14} />上传材料<input accept=".docx,.pdf,.jpg,.jpeg,.png" aria-label={`第 ${topicIndex + 1} 个议题上传材料`} multiple onChange={(event) => { module002AddFiles(topic.id, event.target.files); event.target.value = ""; }} type="file" /></label></div>{topic.firstTopicLocked ? <small>第一议题锁定</small> : <><button aria-label="上移议题" className="module002IconButton" disabled={topicIndex === 0 || (module002Draft.topics[0]?.firstTopicLocked && topicIndex === 1)} onClick={() => module002OnSetTopics(module002MoveItem(module002Draft.topics, topicIndex, topicIndex - 1).map((item, index) => ({ ...item, order: index })))} type="button"><ArrowUp size={13} /></button><button aria-label="下移议题" className="module002IconButton" disabled={topicIndex === module002Draft.topics.length - 1} onClick={() => module002OnSetTopics(module002MoveItem(module002Draft.topics, topicIndex, topicIndex + 1).map((item, index) => ({ ...item, order: index })))} type="button"><ArrowDown size={13} /></button><button aria-label="删除议题" className="module002IconButton" onClick={() => module002OnSetTopics(module002Draft.topics.filter((item) => item.id !== topic.id).map((item, index) => ({ ...item, order: index })))} type="button"><Trash2 size={14} /></button></>}</div>
+            <div className="module002TopicHeader"><span>{topicIndex + 1}</span><div className="module002TopicTitleField">{module002IsCommitteeDraft ? <strong>{topic.firstTopicLocked ? "第一议题材料" : "其他议题材料"}</strong> : <input aria-label={`第 ${topicIndex + 1} 个议题标题`} onChange={(event) => module002OnSetTopics(module002Draft.topics.map((item) => item.id === topic.id ? { ...item, title: event.target.value } : item))} value={topic.title} />}<label className="module002TopicUploadButton" title="上传本议题材料"><FilePlus2 size={14} />上传材料<input accept=".docx,.pdf,.jpg,.jpeg,.png" aria-label={`第 ${topicIndex + 1} 个议题上传材料`} multiple onChange={(event) => { module002AddFiles(topic.id, event.target.files); event.target.value = ""; }} type="file" /></label></div>{topic.firstTopicLocked ? <small>第一议题锁定</small> : <><button aria-label="上移议题" className="module002IconButton" disabled={topicIndex === 0 || (module002Draft.topics[0]?.firstTopicLocked && topicIndex === 1)} onClick={() => module002OnSetTopics(module002MoveItem(module002Draft.topics, topicIndex, topicIndex - 1).map((item, index) => ({ ...item, order: index })))} type="button"><ArrowUp size={13} /></button><button aria-label="下移议题" className="module002IconButton" disabled={topicIndex === module002Draft.topics.length - 1} onClick={() => module002OnSetTopics(module002MoveItem(module002Draft.topics, topicIndex, topicIndex + 1).map((item, index) => ({ ...item, order: index })))} type="button"><ArrowDown size={13} /></button><button aria-label="删除议题" className="module002IconButton" onClick={() => module002OnSetTopics(module002Draft.topics.filter((item) => item.id !== topic.id).map((item, index) => ({ ...item, order: index })))} type="button"><Trash2 size={14} /></button></>}</div>
             {topic.sources.map((source, sourceIndex) => <div className="module002SourceCard" key={source.id}>
-              <div><strong>{source.fileName}</strong><span className={`module002SourceStatus is-${source.status}`}>{source.status === "parsing" ? <LoaderCircle className="module002Spin" size={13} /> : null}{source.status === "ready" ? "已选段" : source.status === "needsSelection" ? "需人工选择" : source.status === "failed" ? source.error : source.status === "parsing" ? module002ParseProgress.get(source.id)?.detail ?? "解析中" : "等待"}</span><button aria-label={`上移 ${source.fileName}`} disabled={sourceIndex === 0} onClick={() => module002OnSetTopics(module002Draft.topics.map((item) => item.id === topic.id ? { ...item, sources: module002MoveItem(item.sources, sourceIndex, sourceIndex - 1) } : item))} type="button"><ArrowUp size={12} /></button><button aria-label={`下移 ${source.fileName}`} disabled={sourceIndex === topic.sources.length - 1} onClick={() => module002OnSetTopics(module002Draft.topics.map((item) => item.id === topic.id ? { ...item, sources: module002MoveItem(item.sources, sourceIndex, sourceIndex + 1) } : item))} type="button"><ArrowDown size={12} /></button><button aria-label={source.status === "parsing" ? `取消并移除 ${source.fileName}` : `移除 ${source.fileName}`} onClick={() => module002RemoveSource(topic.id, source.id)} type="button"><Trash2 size={13} /></button></div>
+              <div><strong>{source.fileName}</strong>{module002IsCommitteeDraft ? <label className="module002CommitteeSourceTitle">三级标题<input aria-label={`${source.fileName}三级标题`} onChange={(event) => { module002SourceTitleOverrides.current.set(source.id, event.target.value); module002OnSetTopics(module002Draft.topics.map((item) => item.id === topic.id ? { ...item, sources: item.sources.map((entry) => entry.id === source.id ? { ...entry, title: event.target.value } : entry) } : item)); }} value={source.title || source.fileName.replace(/\.[^.]+$/, "")} /></label> : null}<span className={`module002SourceStatus is-${source.status}`}>{source.status === "parsing" ? <LoaderCircle className="module002Spin" size={13} /> : null}{source.status === "ready" ? "已选段" : source.status === "needsSelection" ? "需人工选择" : source.status === "failed" ? source.error : source.status === "parsing" ? module002ParseProgress.get(source.id)?.detail ?? "解析中" : "等待"}</span><button aria-label={`上移 ${source.fileName}`} disabled={sourceIndex === 0} onClick={() => module002OnSetTopics(module002Draft.topics.map((item) => item.id === topic.id ? { ...item, sources: module002MoveItem(item.sources, sourceIndex, sourceIndex - 1) } : item))} type="button"><ArrowUp size={12} /></button><button aria-label={`下移 ${source.fileName}`} disabled={sourceIndex === topic.sources.length - 1} onClick={() => module002OnSetTopics(module002Draft.topics.map((item) => item.id === topic.id ? { ...item, sources: module002MoveItem(item.sources, sourceIndex, sourceIndex + 1) } : item))} type="button"><ArrowDown size={12} /></button><button aria-label={source.status === "parsing" ? `取消并移除 ${source.fileName}` : `移除 ${source.fileName}`} onClick={() => module002RemoveSource(topic.id, source.id)} type="button"><Trash2 size={13} /></button></div>
               {source.status === "parsing" ? <progress aria-label={`${source.fileName}解析进度`} max="1" value={module002ParseProgress.get(source.id)?.ratio ?? 0} /> : null}
               {source.candidates.length ? <select aria-label={`${source.fileName}原文段落`} onChange={(event) => module002OnSetTopics(module002Draft.topics.map((item) => item.id === topic.id ? { ...item, sources: item.sources.map((entry) => entry.id === source.id ? { ...entry, selectedText: event.target.value, status: "ready" } : entry) } : item))} value={source.selectedText}><option value="">人工选择原文</option>{source.candidates.map((candidate, index) => <option key={`${source.id}-${index}`} value={candidate}>候选 {index + 1}：{candidate.slice(0, 28)}</option>)}</select> : null}
               <textarea aria-label={`${source.fileName}选中原文`} onChange={(event) => module002OnSetTopics(module002Draft.topics.map((item) => item.id === topic.id ? { ...item, sources: item.sources.map((entry) => entry.id === source.id ? { ...entry, selectedText: event.target.value, status: event.target.value.trim() ? "ready" : "needsSelection" } : entry) } : item))} placeholder="没有自动候选时，可从本地预览中人工粘贴完整原文段落" rows="3" value={source.selectedText} />
               <label className="module002SourceReparse">重新选择并解析<input accept=".docx,.pdf,.jpg,.jpeg,.png" onChange={(event) => { module002ReparseSource(topic.id, source.id, event.target.files[0]); event.target.value = ""; }} type="file" /></label>
             </div>)}
           </article>)}
-          <button className="module002TextButton" onClick={() => module002OnSetTopics([...module002Draft.topics, { id: module002CreateId("topic"), title: "", order: module002Draft.topics.length, firstTopicLocked: false, sources: [] }])} type="button">{module002Draft.topics.length ? "+ 添加后续议题" : "+ 添加第一个议题"}</button>
+          <button className="module002TextButton" onClick={() => module002OnSetTopics([...module002Draft.topics, { id: module002CreateId("topic"), title: "", order: module002Draft.topics.length, firstTopicLocked: false, sources: [] }])} type="button">{module002IsCommitteeDraft ? "+ 添加议题材料" : module002Draft.topics.length ? "+ 添加后续议题" : "+ 添加第一个议题"}</button>
         </Module002Step>
 
         <Module002Step module002Active={["speakers", "people"].includes(module002ActiveSection)} module002Badge={`${module002OrderedSpeakers.length} 人`} module002Id="speakers" module002OnActivate={() => module002OnFocusSection("speakers")} module002Open={module002OpenSteps.has("speakers")} module002OnToggle={() => module002ToggleStep("speakers")} module002Title="发言设置">
           <label>模型<select onChange={(event) => module002OnUpdateConfig((config) => ({ ...config, settings: { ...config.settings, preferredModel: event.target.value } }))} value={module002Config.settings.preferredModel}>{module002Models.map((model) => <option key={model} value={model}>{model}</option>)}</select></label>
-          <fieldset className="module002CompactFieldset"><legend>发言人</legend>{module002Draft.meetingInfo.attendeePersonIds.map((id) => module002PersonMap.get(id)).filter(Boolean).map((person) => { const module002IsHost = person.id === module002Draft.meetingInfo.hostPersonId; return <label key={person.id}><input checked={module002IsHost || module002Draft.speakerPersonIds.includes(person.id)} disabled={module002IsHost} onChange={(event) => module002OnSetSpeakers(event.target.checked ? [...module002Draft.speakerPersonIds, person.id] : module002Draft.speakerPersonIds.filter((item) => item !== person.id))} type="checkbox" />{person.name}{module002IsHost ? "（主持人固定参与普通交流发言）" : ""}</label>; })}</fieldset>
-          {module002OrderedSpeakers
+          {module002IsCommitteeDraft ? <p className="module002CommitteeSpeakerHint">支委会自动使用出席人员中支部岗位含“委员”或“书记”的人员；书记负责传达、贯彻落实意见和最后发言。</p> : <><fieldset className="module002CompactFieldset"><legend>发言人</legend>{module002Draft.meetingInfo.attendeePersonIds.map((id) => module002PersonMap.get(id)).filter(Boolean).map((person) => { const module002IsHost = person.id === module002Draft.meetingInfo.hostPersonId; return <label key={person.id}><input checked={module002IsHost || module002Draft.speakerPersonIds.includes(person.id)} disabled={module002IsHost} onChange={(event) => module002OnSetSpeakers(event.target.checked ? [...module002Draft.speakerPersonIds, person.id] : module002Draft.speakerPersonIds.filter((item) => item !== person.id))} type="checkbox" />{person.name}{module002IsHost ? "（主持人固定参与普通交流发言）" : ""}</label>; })}</fieldset>{module002OrderedSpeakers
             .filter((module002Person) => module002Draft.speeches[module002Person.id]?.trim())
-            .map((module002Person) => <button className="module002TextButton" key={`revise-${module002Person.id}`} onClick={() => module002OnRevisePerson(module002Person.id)} type="button">修改 {module002Person.name} 的发言</button>)}
+            .map((module002Person) => <button className="module002TextButton" key={`revise-${module002Person.id}`} onClick={() => module002OnRevisePerson(module002Person.id)} type="button">修改 {module002Person.name} 的发言</button>)}</>}
           <label>完整 Prompt<textarea onChange={(event) => module002OnUpdateDraft((draft) => ({ ...draft, prompt: event.target.value }))} rows="8" value={module002Draft.prompt} /></label>
           <div className="module002VariableButtons">{module002RequiredPromptVariables.map((variable) => <button key={variable} onClick={() => module002OnUpdateDraft((draft) => ({ ...draft, prompt: `${draft.prompt}\n${variable}` }))} type="button">{variable}</button>)}</div>
-          <button className="module002TextButton" onClick={() => module002OnUpdateDraft((draft) => ({ ...draft, prompt: `【待用户提供真实业务Prompt】\n${module002StandardProtocolText}\n\n正文：\n{{CURRENT_DOCUMENT_BODY}}\n\n人物卡：\n{{PERSON_CARDS}}` }))} type="button">恢复标准 JSON 协议骨架</button>
+          <button className="module002TextButton" onClick={() => module002OnUpdateDraft((draft) => ({ ...draft, prompt: `【待用户提供真实业务Prompt】\n${module002IsCommitteeDraft ? module002GetCommitteeProtocolText(module002PromptIdentityField) : module002StandardProtocolText}\n\n正文：\n{{CURRENT_DOCUMENT_BODY}}\n\n人物卡：\n{{PERSON_CARDS}}` }))} type="button">恢复标准 JSON 协议骨架</button>
           <details className="module002RequestPreview"><summary>发送内容预览</summary><p>正文（仅议题材料与会议详细记录）：</p><pre>{module002BuildAiDocumentBody(module002Draft, module002Config)}</pre><p>人物字段：</p><pre>{module002SerializePersonCards(module002OrderedSpeakers, module002Config.personFields, module002PromptIdentityField)}</pre><small>不会发送 API Key、未选人物或原始文件。约 {module002BuildAiDocumentBody(module002Draft, module002Config).length} 字符。</small></details>
         </Module002Step>
 
@@ -418,7 +510,10 @@ export default function Module002RightPanel({
       </div>
       <div className="module002RightBottomActions">
         <button className="module002GenerateButton" disabled={module002GenerationChecks.length > 0 || module002AiBusy} onClick={module002OnGenerate} title={module002GenerationChecks[0]?.label} type="button">{module002AiBusy ? <LoaderCircle className="module002Spin" size={16} /> : <Sparkles size={16} />}生成全部发言</button>
-        <button className="module002ExportButton" disabled={module002ExportChecks.length > 0 || module002ExportBusy} onClick={module002OnExport} title={module002ExportChecks[0]?.label} type="button">{module002ExportBusy ? <LoaderCircle className="module002Spin" size={16} /> : <FileText size={16} />}导出Word</button>
+        <div className="module002ExportControl" onPointerEnter={() => setModule002ExportMenuOpen(true)} onPointerLeave={() => setModule002ExportMenuOpen(false)}>
+          {module002ExportMenuOpen ? <div className="module002ExportMenu"><label><input checked={module002ExportAttendance} onChange={(event) => setModule002ExportAttendance(event.target.checked)} type="checkbox" />导出时生成签到簿</label><label><input checked={module002ExportNotice} onChange={(event) => setModule002ExportNotice(event.target.checked)} type="checkbox" />导出时生成通知</label></div> : null}
+          <button className="module002ExportButton" disabled={module002ExportChecks.length > 0 || module002ExportBusy} onClick={module002HandleExport} onPointerDown={module002HandleExportPointerDown} title={module002ExportChecks[0]?.label} type="button">{module002ExportBusy ? <LoaderCircle className="module002Spin" size={16} /> : <FileText size={16} />}导出Word</button>
+        </div>
       </div>
     </aside>
   );

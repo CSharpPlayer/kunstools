@@ -127,10 +127,15 @@ describe("module002 configuration ZIP", () => {
         [`templates:${module002ImportedTemplate.id}`]: "copy",
       },
     });
-    expect(module002Merged.templates).toHaveLength(2);
-    expect(module002Merged.templates[1].name).toContain("导入副本");
-    expect(module002Merged.templates[1].id).not.toBe(module002ImportedTemplate.id);
-    expect(module002Merged.templates[1].modules[0].id).not.toBe(
+    expect(module002Merged.templates).toHaveLength(
+      module002Local.templates.length + 1,
+    );
+    const module002ImportedCopy = module002Merged.templates.find(
+      (module002Template) => module002Template.name.includes("导入副本"),
+    );
+    expect(module002ImportedCopy).toBeDefined();
+    expect(module002ImportedCopy.id).not.toBe(module002ImportedTemplate.id);
+    expect(module002ImportedCopy.modules[0].id).not.toBe(
       module002ImportedTemplate.modules[0].id,
     );
   });

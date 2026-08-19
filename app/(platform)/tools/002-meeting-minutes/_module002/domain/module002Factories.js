@@ -1,15 +1,29 @@
 import {
   module002DraftSchema,
   module002WorkspaceConfigSchema,
+  module002WorkspaceFormatVersion,
+  module002SpeechLengthFieldId,
 } from "./module002Schemas";
 import {
+  module002GenericCommitteeMeetingDefaultPrompt,
+  module002GenericPartyCongressDefaultPrompt,
+  module002ThirdBranchCommitteeMeetingDefaultPrompt,
   module002ThirdBranchPartyCongressDefaultPrompt,
   module002ThirdBranchPresetPeople,
 } from "./module002Presets";
+import {
+  module002CommitteeMeetingType,
+  module002PartyCongressMeetingType,
+} from "./module002CommitteeMeeting";
 
 /** 生成不依赖姓名或数组位置的稳定业务 ID。 */
 export function module002CreateId(module002Prefix) {
   return `${module002Prefix}-${crypto.randomUUID()}`;
+}
+
+/** 返回人物卡的默认发言字数；李万庄使用已确认的 120 字，其余人员为 60 字。 */
+export function module002GetDefaultSpeechLength(module002PersonName) {
+  return module002PersonName?.trim() === "李万庄" ? "120" : "60";
 }
 
 /** 返回本机当天的 YYYY-MM-DD 日期。 */
@@ -63,7 +77,7 @@ export function module002CreateDefaultDocumentFormat() {
       ...module002Body,
       fontFamily: "楷体_GB2312",
       align: "left",
-      firstLineIndentChars: 0,
+      firstLineIndentChars: 2,
     },
   };
 }
@@ -72,6 +86,7 @@ export function module002CreateDefaultDocumentFormat() {
 export function module002CreatePartyCongressTemplate(
   module002BranchId,
   module002Defaults = {},
+  module002BranchName = "",
 ) {
   const module002Now = new Date().toISOString();
   const module002Module = (module002Type, module002Label) => ({
@@ -87,10 +102,14 @@ export function module002CreatePartyCongressTemplate(
     id: module002CreateId("template"),
     branchId: module002BranchId,
     name: "党员大会",
+    meetingType: module002PartyCongressMeetingType,
     revision: 0,
     createdAt: module002Now,
     updatedAt: module002Now,
-    defaultPrompt: module002ThirdBranchPartyCongressDefaultPrompt,
+    defaultPrompt:
+      module002BranchName === "第三党支部"
+        ? module002ThirdBranchPartyCongressDefaultPrompt
+        : module002GenericPartyCongressDefaultPrompt,
     defaults: {
       location: "",
       hostPersonId: module002Defaults.hostPersonId ?? null,
@@ -108,6 +127,48 @@ export function module002CreatePartyCongressTemplate(
   };
 }
 
+/** 建立支委会预制模板，正文结构由文档领域按会议类型确定。 */
+export function module002CreateCommitteeMeetingTemplate(
+  module002BranchId,
+  module002Defaults = {},
+  module002BranchName = "",
+) {
+  const module002Now = new Date().toISOString();
+  const module002Module = (module002Type, module002Label) => ({
+    id: module002CreateId("module"),
+    type: module002Type,
+    label: module002Label,
+    staticText: "",
+    customField: null,
+    styleOverride: {},
+  });
+
+  return {
+    id: module002CreateId("template"),
+    branchId: module002BranchId,
+    name: "支委会",
+    meetingType: module002CommitteeMeetingType,
+    revision: 0,
+    createdAt: module002Now,
+    updatedAt: module002Now,
+    defaultPrompt:
+      module002BranchName === "第三党支部"
+        ? module002ThirdBranchCommitteeMeetingDefaultPrompt
+        : module002GenericCommitteeMeetingDefaultPrompt,
+    defaults: {
+      location: "",
+      hostPersonId: module002Defaults.hostPersonId ?? null,
+      recorderPersonId: module002Defaults.recorderPersonId ?? null,
+    },
+    modules: [
+      module002Module("mainTitle", "主标题"),
+      module002Module("meetingSummary", "会议情况说明"),
+      module002Module("topicSummary", "议题说明"),
+      module002Module("topicDetails", "会议详细记录"),
+    ],
+  };
+}
+
 /** 按预置名单建立第三党支部人物卡，序号与数组顺序保持一致。 */
 export function module002CreateThirdBranchPresetPeople(module002BranchId) {
   return module002ThirdBranchPresetPeople.map((module002PresetPerson, module002Order) => ({
@@ -118,6 +179,9 @@ export function module002CreateThirdBranchPresetPeople(module002BranchId) {
     values: {
       branchRole: module002PresetPerson.branchRole,
       businessRole: module002PresetPerson.businessRole,
+      [module002SpeechLengthFieldId]: module002GetDefaultSpeechLength(
+        module002PresetPerson.name,
+      ),
     },
     isExample: false,
   }));
@@ -138,6 +202,7 @@ export function module002CreateInitialWorkspace() {
     ["name", "姓名"],
     ["branchRole", "支部岗位"],
     ["businessRole", "业务岗位"],
+    [module002SpeechLengthFieldId, "发言字数"],
   ].map(([module002Id, module002Label], module002Order) => ({
     id: module002Id,
     label: module002Label,
@@ -150,21 +215,62 @@ export function module002CreateInitialWorkspace() {
   );
 
   return module002WorkspaceConfigSchema.parse({
-    formatVersion: 1,
+    formatVersion: module002WorkspaceFormatVersion,
     workspaceId: module002CreateId("workspace"),
     revision: 0,
     createdAt: module002Now,
     updatedAt: module002Now,
     branches: module002Branches,
     templates: [
-      module002CreatePartyCongressTemplate(module002Branches[2].id, {
-        hostPersonId: module002ThirdBranchPeople[0].id,
-        recorderPersonId: module002ThirdBranchPeople[7].id,
-      }),
-    ],
+      module002Branches[2],
+      module002Branches[0],
+      module002Branches[1],
+    ].flatMap((module002Branch) => {
+      const module002Defaults = module002Branch.name === "第三党支部"
+        ? {
+            hostPersonId: module002ThirdBranchPeople[0].id,
+            recorderPersonId: module002ThirdBranchPeople[7].id,
+          }
+        : {};
+      return [
+        module002CreatePartyCongressTemplate(
+          module002Branch.id,
+          module002Defaults,
+          module002Branch.name,
+        ),
+        module002CreateCommitteeMeetingTemplate(
+          module002Branch.id,
+          module002Defaults,
+          module002Branch.name,
+        ),
+      ];
+    }),
     personFields: module002BuiltInFields,
     people: module002ThirdBranchPeople,
     documentFormat: module002CreateDefaultDocumentFormat(),
+    exportTemplates: {
+      notice: {
+        source: "builtIn",
+        customFileName: null,
+        mapping: {
+          title: 7,
+          recipient: 9,
+          explanation: 10,
+          topics: 11,
+          attire: 12,
+          signatureDate: 22,
+        },
+      },
+      attendance: {
+        source: "builtIn",
+        customFileName: null,
+        mapping: {
+          organization: "C2:F2",
+          meetingName: "C3:F3",
+          topics: "C4:F4",
+        },
+      },
+    },
     settings: {
       preferredModel: "deepseek-v4-flash",
     },
@@ -181,9 +287,20 @@ export function module002CreateDraft({
   const module002BranchPeople = module002People
     .filter((module002Person) => module002Person.branchId === module002Template.branchId)
     .sort((module002Left, module002Right) => module002Left.order - module002Right.order);
-  const module002AttendeeIds = module002BranchPeople.map(
+  const module002DefaultAttendees =
+    module002Template.meetingType === module002CommitteeMeetingType
+      ? module002BranchPeople.filter((module002Person) =>
+          /书记|委员/.test(module002Person.values.branchRole ?? ""),
+        )
+      : module002BranchPeople;
+  const module002AttendeeIds = module002DefaultAttendees.map(
     (module002Person) => module002Person.id,
   );
+  const module002RecorderPersonId = module002AttendeeIds.includes(
+    module002Template.defaults.recorderPersonId,
+  )
+    ? module002Template.defaults.recorderPersonId
+    : null;
   const module002CustomValues = Object.fromEntries(
     module002Template.modules
       .filter((module002Module) => module002Module.type === "customField")
@@ -205,6 +322,7 @@ export function module002CreateDraft({
     branchId: module002Template.branchId,
     meetingInfo: {
       meetingName: module002Template.name,
+      meetingType: module002Template.meetingType,
       date: module002Today(),
       time: "",
       location: module002Template.defaults.location,
@@ -212,7 +330,7 @@ export function module002CreateDraft({
       absentPersonIds: [],
       observers: "",
       hostPersonId: module002Template.defaults.hostPersonId,
-      recorderPersonId: module002Template.defaults.recorderPersonId,
+      recorderPersonId: module002RecorderPersonId,
     },
     topics: [],
     speakerPersonIds: module002AttendeeIds,

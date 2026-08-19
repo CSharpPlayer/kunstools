@@ -2,7 +2,14 @@
 
 import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
-import { module002CreateId } from "../domain/module002Factories";
+import {
+  module002CreateId,
+  module002GetDefaultSpeechLength,
+} from "../domain/module002Factories";
+import {
+  module002IsValidSpeechLength,
+  module002SpeechLengthFieldId,
+} from "../domain/module002Schemas";
 import Module002Dialog from "../components/module002Dialog";
 
 /** 提供三支部共用列结构的人物卡表格和 Excel 多行多列粘贴。 */
@@ -57,7 +64,7 @@ export default function Module002PeopleDialog({
           branchId: module002BranchId,
           order: module002People.length,
           name: "",
-          values: {},
+          values: { [module002SpeechLengthFieldId]: module002GetDefaultSpeechLength("") },
           isExample: false,
         },
       ],
@@ -66,6 +73,13 @@ export default function Module002PeopleDialog({
 
   /** 更新单个单元格，不让异常值影响整张表。 */
   function module002UpdateCell(module002PersonId, module002FieldId, module002Value) {
+    if (
+      module002FieldId === module002SpeechLengthFieldId
+      && module002Value !== ""
+      && !module002IsValidSpeechLength(module002Value)
+    ) {
+      return;
+    }
     module002OnChange((module002NextConfig) => ({
       ...module002NextConfig,
       people: module002NextConfig.people.map((module002Person) => {
@@ -121,7 +135,7 @@ export default function Module002PeopleDialog({
             branchId: module002BranchId,
             order: module002BranchPeople.length,
             name: "",
-            values: {},
+            values: { [module002SpeechLengthFieldId]: module002GetDefaultSpeechLength("") },
             isExample: false,
           };
           module002BranchPeople.push(module002Person);
@@ -131,7 +145,13 @@ export default function Module002PeopleDialog({
           const module002Field = module002Fields[module002PasteAnchor.column + module002ColumnOffset];
           if (!module002Field || module002Field.id === "serialNumber") return;
           if (module002Field.id === "name") module002Person.name = module002Cell.trim();
-          else module002Person.values = { ...module002Person.values, [module002Field.id]: module002Cell };
+          else if (
+            module002Field.id !== module002SpeechLengthFieldId
+            || module002Cell.trim() === ""
+            || module002IsValidSpeechLength(module002Cell)
+          ) {
+            module002Person.values = { ...module002Person.values, [module002Field.id]: module002Cell.trim() };
+          }
         });
       });
       return { ...module002NextConfig, people: module002NextPeople };
@@ -221,8 +241,16 @@ export default function Module002PeopleDialog({
                         />
                       ) : (
                         <input
-                          aria-invalid={module002Field.id === "name" && module002DuplicateNames.has(module002Person.name.trim())}
+                          aria-invalid={
+                            (module002Field.id === "name" && module002DuplicateNames.has(module002Person.name.trim()))
+                            || (
+                              module002Field.id === module002SpeechLengthFieldId
+                              && module002Person.values[module002Field.id]
+                              && !module002IsValidSpeechLength(module002Person.values[module002Field.id])
+                            )
+                          }
                           aria-label={`${module002Person.name || "未命名人物"} ${module002Field.label}`}
+                          inputMode={module002Field.id === module002SpeechLengthFieldId ? "numeric" : undefined}
                           onChange={(event) => module002UpdateCell(module002Person.id, module002Field.id, event.target.value)}
                           onFocus={() => setModule002PasteAnchor({ row: module002RowIndex, column: module002ColumnIndex })}
                           value={module002Field.id === "name" ? module002Person.name : module002Person.values[module002Field.id] ?? ""}

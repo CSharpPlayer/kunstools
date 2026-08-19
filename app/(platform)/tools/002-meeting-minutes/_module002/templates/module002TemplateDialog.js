@@ -68,10 +68,17 @@ export default function Module002TemplateDialog({
   module002OnClose,
   module002Config,
   module002OnChange,
+  module002Draft,
 }) {
-  const [module002BranchId, setModule002BranchId] = useState(module002Config.branches[0]?.id);
+  const [module002BranchId, setModule002BranchId] = useState(
+    module002Draft?.branchId ?? module002Config.branches[0]?.id,
+  );
   const module002Templates = useMemo(() => module002Config.templates.filter((item) => item.branchId === module002BranchId), [module002BranchId, module002Config.templates]);
-  const [module002TemplateId, setModule002TemplateId] = useState(module002Templates[0]?.id ?? null);
+  const [module002TemplateId, setModule002TemplateId] = useState(
+    module002Config.templates.find(
+      (module002Template) => module002Template.id === module002Draft?.templateId,
+    )?.id ?? module002Templates[0]?.id ?? null,
+  );
   const [module002TransferOpen, setModule002TransferOpen] = useState(false);
   const module002Template = module002Config.templates.find((item) => item.id === module002TemplateId) ?? module002Templates[0] ?? null;
   const module002Errors = module002Template ? module002ValidateTemplateModules(module002Template.modules) : [];
@@ -98,6 +105,7 @@ export default function Module002TemplateDialog({
     const module002Now = new Date().toISOString();
     const module002NewTemplate = {
       id: module002CreateId("template"), branchId: module002BranchId, name: "新建模板", revision: 0,
+      meetingType: "partyCongress",
       createdAt: module002Now, updatedAt: module002Now, defaultPrompt: module002PlaceholderPrompt,
       defaults: { location: "", hostPersonId: null, recorderPersonId: null },
       modules: [{ id: module002CreateId("module"), type: "mainTitle", label: "主标题", staticText: "", customField: null, styleOverride: {} }],
@@ -158,6 +166,7 @@ export default function Module002TemplateDialog({
                 setModule002TemplateId(null);
               }} type="button"><Trash2 size={15} />删除</button>
             </div>
+            <label className="module002TemplatePrompt">默认 AI Prompt<textarea onChange={(event) => module002UpdateTemplate((item) => ({ ...item, defaultPrompt: event.target.value }))} rows="10" value={module002Template.defaultPrompt} /></label>
             {module002Errors.length ? <div className="module002InlineError" role="alert">{module002Errors.map((item) => <p key={item}>{item}</p>)}</div> : null}
             <div className="module002AddModuleRow"><span>添加模块</span>{Object.entries(module002ModuleLabels).map(([module002Type, module002Label]) => <button key={module002Type} onClick={() => module002AddModule(module002Type)} type="button">{module002Label}</button>)}</div>
             <DndContext collisionDetection={closestCenter} onDragEnd={({ active, over }) => {

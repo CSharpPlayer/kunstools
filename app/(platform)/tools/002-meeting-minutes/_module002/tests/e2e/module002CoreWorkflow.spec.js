@@ -19,8 +19,16 @@ const module002ImageFixturePath = path.join(
 async function module002InstallTestWorkspace(page) {
   await page.addInitScript(() => {
     let module002Prepared = false;
-    window.showDirectoryPicker = async () => {
+    window.showDirectoryPicker = async (module002Options = {}) => {
       const module002Root = await navigator.storage.getDirectory();
+      if (module002Options.id === "kt002-export-dir") {
+        const module002ExportDirectory = await module002Root.getDirectoryHandle(
+          "module002-test-exports",
+          { create: true },
+        );
+        window.__module002TestExportHandle = module002ExportDirectory;
+        return module002ExportDirectory;
+      }
       if (!module002Prepared) {
         for await (const [module002Name] of module002Root.entries()) {
           await module002Root.removeEntry(module002Name, { recursive: true });
@@ -51,6 +59,7 @@ async function module002InstallTestWorkspace(page) {
         create: true,
       });
     };
+    window.confirm = () => true;
   });
 }
 
@@ -60,6 +69,18 @@ async function module002EnterSharedWorkspace(page) {
   await page.getByRole("button", { name: "选择文件夹" }).click();
   await expect(page.getByRole("button", { name: "更换文件夹" })).toBeVisible();
   await page.goto("/tools/002-meeting-minutes");
+}
+
+/** 在多个党支部均有预制模板时，明确选择第三党支部的指定会议类型。 */
+async function module002ChooseThirdBranchTemplate(page, module002TemplateName) {
+  const module002TemplateDialog = page.getByRole("dialog", {
+    name: "选择党支部模板",
+  });
+  await module002TemplateDialog
+    .locator("section")
+    .filter({ hasText: "第三党支部" })
+    .getByRole("button", { name: module002TemplateName })
+    .click();
 }
 
 /** 模拟固定协议 DeepSeek，兼容人物 ID 与可见序号两种回填键。 */
@@ -80,10 +101,11 @@ async function module002InstallAiMock(page) {
       ? "serialNumber"
       : "personId";
     const module002People = Array.from(
-      module002Payload.prompt.matchAll(/(?:人物ID|序号)：([^\n]+)\n姓名：([^\n]+)/g),
+      module002Payload.prompt.matchAll(/(?:人物ID|序号)：([^\n]+)\n姓名：([^\n]+)(?:\n支部岗位：([^\n]+))?/g),
       (module002Match) => ({
         identifier: module002Match[1].trim(),
         name: module002Match[2].trim(),
+        branchRole: module002Match[3]?.trim() ?? "",
       }),
     );
     const module002UniquePeople = Array.from(
@@ -92,16 +114,36 @@ async function module002InstallAiMock(page) {
         module002Person,
       ])).values(),
     );
+    const module002CommitteeResponse = module002Payload.prompt.includes(
+      '"secretaryImplementation"',
+    );
     await route.fulfill({
       contentType: "application/json",
       body: JSON.stringify({
-        content: JSON.stringify({
-          speeches: module002UniquePeople.map((module002Person, module002Index) => ({
-            [module002IdentityField]: module002Person.identifier,
-            name: module002Person.name,
-            content: `合成交流发言 ${module002Index + 1}，内容仅用于自动化验证。`,
-          })),
-        }),
+        content: JSON.stringify(
+          module002CommitteeResponse
+            ? {
+                secretaryImplementation: "合成贯彻落实意见，仅用于自动化验证。",
+                speeches: module002UniquePeople
+                  .filter(
+                    (module002Person) =>
+                      !module002Person.branchRole.includes("书记"),
+                  )
+                  .map((module002Person, module002Index) => ({
+                    [module002IdentityField]: module002Person.identifier,
+                    name: module002Person.name,
+                    content: `合成委员发言 ${module002Index + 1}，内容仅用于自动化验证。`,
+                  })),
+                secretaryClosing: "合成书记最后发言，仅用于自动化验证。",
+              }
+            : {
+                speeches: module002UniquePeople.map((module002Person, module002Index) => ({
+                  [module002IdentityField]: module002Person.identifier,
+                  name: module002Person.name,
+                  content: `合成交流发言 ${module002Index + 1}，内容仅用于自动化验证。`,
+                })),
+              },
+        ),
       }),
     });
   });
@@ -135,7 +177,7 @@ test("002 可完成本地工作区、材料解析、模拟生成、编辑和两�
 
   await page.getByRole("button", { name: "配置党支部模板" }).click();
   const module002ConfigDialog = page.getByRole("dialog", { name: "配置党支部模板" });
-  await module002ConfigDialog.getByLabel("党支部").selectOption({ label: "第三党支部" });
+  await module002ConfigDialog.getByLabel("党支部", { exact: true }).selectOption({ label: "第三党支部" });
   const module002TemplateNameInput = module002ConfigDialog.getByLabel("模板名称");
   await module002TemplateNameInput.fill("");
   await module002TemplateNameInput.pressSequentially("TemplateName", { delay: 5 });
@@ -153,6 +195,7 @@ test("002 可完成本地工作区、材料解析、模拟生成、编辑和两�
   await module002PeopleDialog.getByRole("button", { name: "新增人物" }).click();
   await module002PeopleDialog.getByRole("button", { name: "新增人物" }).click();
   const module002Rows = module002PeopleDialog.locator("tbody tr");
+  await expect(module002Rows.nth(8).getByLabel("未命名人物 发言字数")).toHaveValue("60");
   const module002FirstNameInput = module002Rows.nth(8).locator("input").nth(0);
   await module002FirstNameInput.fill("");
   await module002FirstNameInput.pressSequentially("PersonAlpha", { delay: 5 });
@@ -182,13 +225,15 @@ test("002 可完成本地工作区、材料解析、模拟生成、编辑和两�
   await module002PasteAnchor.focus();
   await module002PasteAnchor.evaluate((module002Input) => {
     const module002Clipboard = new DataTransfer();
-    module002Clipboard.setData("text/plain", "业务甲\t合成备注甲\n业务乙\t合成备注乙");
+    module002Clipboard.setData("text/plain", "业务甲\t300\t合成备注甲\n业务乙\t420\t合成备注乙");
     module002Input.dispatchEvent(new ClipboardEvent("paste", {
       bubbles: true,
       cancelable: true,
       clipboardData: module002Clipboard,
     }));
   });
+  await expect(module002Rows.nth(8).getByLabel("测试人员甲 发言字数")).toHaveValue("300");
+  await expect(module002Rows.nth(9).getByLabel("测试人员乙 发言字数")).toHaveValue("420");
   await expect(module002Rows.nth(8).locator("textarea")).toHaveValue("合成备注甲");
   await expect(module002Rows.nth(9).locator("textarea")).toHaveValue("合成备注乙");
   page.once("dialog", (module002Dialog) => module002Dialog.accept());
@@ -201,8 +246,7 @@ test("002 可完成本地工作区、材料解析、模拟生成、编辑和两�
   await module002PeopleDialog.getByRole("button", { name: "关闭" }).click();
 
   await page.getByRole("button", { name: "选择党支部模板" }).click();
-  const module002TemplateDialog = page.getByRole("dialog", { name: "选择党支部模板" });
-  await module002TemplateDialog.getByRole("button", { name: "党员大会" }).click();
+  await module002ChooseThirdBranchTemplate(page, "党员大会");
   await expect(page.locator('[data-module-type="mainTitle"]')).toBeVisible();
   await page.getByRole("button", { name: "+ 添加第一个议题" }).click();
 
@@ -264,22 +308,33 @@ test("002 可完成本地工作区、材料解析、模拟生成、编辑和两�
 
   const module002ExportButton = page.getByRole("button", { name: "导出Word" });
   await expect(module002ExportButton).toBeEnabled();
+  await module002ExportButton.hover();
+  await page.getByLabel("导出时生成签到簿").check();
+  await page.getByLabel("导出时生成通知").check();
   await module002ExportButton.click();
-  await expect(page.getByText("Word 已保存；当前草稿继续保留")).toBeVisible();
-  const module002FirstExportSize = await page.evaluate(async () => {
-    const module002Handle = await window.__module002TestWorkspaceHandle.getFileHandle(
-      "module002-export.docx",
-    );
-    return (await module002Handle.getFile()).size;
+  await expect(page.getByText("会议记录及勾选附件已保存；当前草稿继续保留")).toBeVisible();
+  const module002FirstExportFiles = await page.evaluate(async () => {
+    const module002Files = [];
+    for await (const [module002Name, module002Handle] of window.__module002TestExportHandle.entries()) {
+      if (module002Handle.kind === "file" && /\.(docx|xlsx)$/.test(module002Name)) {
+        module002Files.push({ name: module002Name, size: (await module002Handle.getFile()).size });
+      }
+    }
+    return module002Files;
   });
-  expect(module002FirstExportSize).toBeGreaterThan(1000);
+  expect(module002FirstExportFiles).toEqual(expect.arrayContaining([
+    expect.objectContaining({ name: expect.stringMatching(/\.docx$/), size: expect.any(Number) }),
+    expect.objectContaining({ name: expect.stringMatching(/-通知\.docx$/), size: expect.any(Number) }),
+    expect.objectContaining({ name: expect.stringMatching(/-签到簿\.xlsx$/), size: expect.any(Number) }),
+  ]));
+  expect(module002FirstExportFiles.every((module002File) => module002File.size > 1000)).toBe(true);
 
   await module002SpeechEditor.click();
   await page.keyboard.press("Control+End");
   await page.keyboard.type(" 已人工修订");
   await expect(page.getByText("内容已变更，需要重新导出", { exact: true })).toBeVisible();
   await module002ExportButton.click();
-  await expect(page.getByText("Word 已保存；当前草稿继续保留")).toBeVisible();
+  await expect(page.getByText("会议记录及勾选附件已保存；当前草稿继续保留")).toBeVisible();
 
   await page.locator(".module002PaperScroller").evaluate((module002Element) => {
     module002Element.scrollTop = 0;
@@ -316,6 +371,88 @@ test("002 可完成本地工作区、材料解析、模拟生成、编辑和两�
   expect(module002ConsoleErrors).toEqual([]);
 });
 
+test("002 支委会按材料生成固定大节、三级标题、支委发言并导出附件", async ({ page }) => {
+  await module002InstallTestWorkspace(page);
+  await module002InstallAiMock(page);
+  await module002EnterSharedWorkspace(page);
+  await page.getByRole("button", { name: "选择党支部模板" }).click();
+  const module002Picker = page.getByRole("dialog", { name: "选择党支部模板" });
+  await module002Picker
+    .locator("section")
+    .filter({ hasText: "第三党支部" })
+    .getByRole("button", { name: "支委会" })
+    .click();
+
+  await expect(page.getByLabel("会议类型")).toHaveValue("committeeMeeting");
+  await expect(
+    page.getByRole("group", { name: "参加人员" }).getByRole("checkbox", { checked: true }),
+  ).toHaveCount(3);
+  await page.getByLabel("记录人").selectOption({ label: "李风华" });
+  await page.getByLabel("具体时间").fill("上午9:00");
+  await page.getByLabel("地点").fill("支委会议室");
+  await page.getByRole("button", { name: "+ 添加议题材料" }).click();
+  await page.getByLabel("第 1 个议题上传材料").setInputFiles(
+    module002DocxFixturePath,
+  );
+  await expect(page.getByText("第一议题锁定", { exact: true })).toBeVisible();
+  await expect(
+    page.getByLabel("第一议题合成材料甲.docx三级标题"),
+  ).toHaveValue("第一议题合成材料甲");
+  await page
+    .getByLabel("第一议题合成材料甲.docx三级标题")
+    .fill("自定义第一议题标题");
+  await expect(
+    page.locator('[data-module-type="topicDetails"] .module002ProseMirror'),
+  ).toContainText("自定义第一议题标题");
+
+  await page.getByRole("button", { name: "+ 添加议题材料" }).click();
+  await page.getByLabel("第 2 个议题上传材料").setInputFiles(
+    module002DocxFixturePath,
+  );
+  await expect(page.locator(".module002SourceCard").last().getByText("已选段", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: /发言设置/ }).click();
+  await expect(page.getByLabel("完整 Prompt")).toHaveValue(/"secretaryImplementation"/);
+  await expect(page.getByText(/支委会自动使用出席人员/)).toBeVisible();
+  await page.getByRole("button", { name: "生成全部发言" }).click();
+  await expect(page.getByText("支委会会议详细记录已按材料生成并通过人员协议校验")).toBeVisible();
+
+  const module002CommitteeDetails = page.locator('[data-module-type="topicDetails"] .module002ProseMirror');
+  await expect(module002CommitteeDetails).toContainText("一、传达学习习近平总书记系列重要讲话和重要会议精神");
+  await expect(module002CommitteeDetails).toContainText("自定义第一议题标题");
+  await expect(
+    module002CommitteeDetails.locator('p[data-module002-topic-detail-level="3"]').first(),
+  ).toHaveText("（一）自定义第一议题标题");
+  await expect(module002CommitteeDetails).toContainText("党支部书记李万庄同志传达。");
+  await expect(module002CommitteeDetails).toContainText("二、研究确定本月三会一课学习计划事宜");
+  await expect(module002CommitteeDetails).toContainText("李万庄：今天的议题就这么多，散会！");
+  await expect(module002CommitteeDetails.locator('p[data-module002-topic-detail-level="2"]')).toHaveCount(2);
+  await expect(module002CommitteeDetails.locator('p[data-module002-topic-detail-level="3"]')).toHaveCount(2);
+  const module002CommitteeConveyParagraphs = module002CommitteeDetails.locator(
+    'p[data-module002-committee-secretary-convey="true"]',
+  );
+  await expect(module002CommitteeConveyParagraphs).toHaveCount(2);
+  await expect(module002CommitteeConveyParagraphs.first()).toHaveCSS("text-align", "center");
+
+  const module002ExportButton = page.getByRole("button", { name: "导出Word" });
+  await module002ExportButton.hover();
+  await page.getByLabel("导出时生成签到簿").check();
+  await page.getByLabel("导出时生成通知").check();
+  await module002ExportButton.click();
+  await expect(page.getByText("会议记录及勾选附件已保存；当前草稿继续保留")).toBeVisible();
+  const module002ExportNames = await page.evaluate(async () => {
+    const module002Names = [];
+    for await (const [module002Name, module002Handle] of window.__module002TestExportHandle.entries()) {
+      if (module002Handle.kind === "file") module002Names.push(module002Name);
+    }
+    return module002Names;
+  });
+  expect(module002ExportNames).toEqual(expect.arrayContaining([
+    expect.stringMatching(/支委会\.docx$/),
+    expect.stringMatching(/支委会-通知\.docx$/),
+    expect.stringMatching(/支委会-签到簿\.xlsx$/),
+  ]));
+});
+
 test("002 在真实 Chrome 中本地解析文本层 PDF 并执行中文图片 OCR", async ({ page }, testInfo) => {
   test.setTimeout(120000);
   test.skip(testInfo.project.name !== "chrome-desktop", "OCR 资源只需在 Chrome 项目执行一次重型回归");
@@ -331,9 +468,7 @@ test("002 在真实 Chrome 中本地解析文本层 PDF 并执行中文图片 OC
   await module002InstallAiMock(page);
   await module002EnterSharedWorkspace(page);
   await page.getByRole("button", { name: "选择党支部模板" }).click();
-  await page.getByRole("dialog", { name: "选择党支部模板" })
-    .getByRole("button", { name: "党员大会" })
-    .click();
+  await module002ChooseThirdBranchTemplate(page, "党员大会");
   await page.getByRole("button", { name: "+ 添加第一个议题" }).click();
 
   const module002MaterialInput = page.getByLabel("第 1 个议题上传材料");
@@ -362,9 +497,7 @@ test("002 将材料上传到用户点击的对应议题卡", async ({ page }) =>
   await module002InstallTestWorkspace(page);
   await module002EnterSharedWorkspace(page);
   await page.getByRole("button", { name: "选择党支部模板" }).click();
-  await page.getByRole("dialog", { name: "选择党支部模板" })
-    .getByRole("button", { name: "党员大会" })
-    .click();
+  await module002ChooseThirdBranchTemplate(page, "党员大会");
   await page.getByRole("button", { name: "+ 添加第一个议题" }).click();
   await page.getByRole("button", { name: "+ 添加后续议题" }).click();
   await page.getByRole("button", { name: "+ 添加后续议题" }).click();
@@ -384,9 +517,7 @@ test("002 第一议题多份材料合并标题，上传入口贴合对应标题�
   await module002InstallTestWorkspace(page);
   await module002EnterSharedWorkspace(page);
   await page.getByRole("button", { name: "选择党支部模板" }).click();
-  await page.getByRole("dialog", { name: "选择党支部模板" })
-    .getByRole("button", { name: "党员大会" })
-    .click();
+  await module002ChooseThirdBranchTemplate(page, "党员大会");
   await page.getByRole("button", { name: "+ 添加第一个议题" }).click();
 
   const module002FirstTopicCard = page.locator(".module002TopicCard").first();

@@ -3,6 +3,8 @@ import { module002FixtureCatalog } from "../test/fixtures/module002FixtureCatalo
 import {
   module002RenderPrompt,
   module002SerializePersonCards,
+  module002ValidateCommitteeAiResult,
+  module002ValidateCommitteePrompt,
   module002StandardProtocolText,
   module002ValidateAiResult,
   module002ValidatePrompt,
@@ -45,7 +47,7 @@ describe("module002 prompt and result protocol", () => {
       id: "person-internal-id",
       order: 2,
       name: "测试人员丙",
-      values: { branchRole: "支部党员", businessRole: "仓储统计员" },
+      values: { branchRole: "支部党员", businessRole: "仓储统计员", speechLength: "280" },
     };
     const module002PersonCards = module002SerializePersonCards(
       [module002Speaker],
@@ -54,11 +56,13 @@ describe("module002 prompt and result protocol", () => {
         { id: "name", label: "姓名" },
         { id: "branchRole", label: "支部岗位" },
         { id: "businessRole", label: "业务岗位" },
+        { id: "speechLength", label: "发言字数" },
       ],
     );
 
     expect(module002PersonCards).toContain("序号：3");
     expect(module002PersonCards).not.toContain("person-internal-id");
+    expect(module002PersonCards).toContain("发言字数：280");
     expect(
       module002ValidateAiResult({
         module002RawResult: {
@@ -97,5 +101,26 @@ describe("module002 prompt and result protocol", () => {
         { id: "person-speaker", name: "测试人员乙" },
       ),
     ).toThrow("人物不一致");
+  });
+
+  it("校验支委会书记双段发言，并仅回填非书记委员", () => {
+    const module002CommitteePrompt = `{"secretaryImplementation":"","speeches":[{"serialNumber":"","name":"","content":""}],"secretaryClosing":""}\n{{CURRENT_DOCUMENT_BODY}}\n{{PERSON_CARDS}}`;
+    const module002Member = { id: "person-member", order: 1, name: "委员甲" };
+    expect(module002ValidateCommitteePrompt(module002CommitteePrompt)).toEqual([]);
+    expect(
+      module002ValidateCommitteeAiResult({
+        module002RawResult: {
+          secretaryImplementation: "贯彻落实意见",
+          speeches: [{ serialNumber: "2", name: "委员甲", content: "委员发言" }],
+          secretaryClosing: "书记最后发言",
+        },
+        module002CommitteeMembers: [module002Member],
+        module002IdentityField: "serialNumber",
+      }),
+    ).toEqual({
+      secretaryImplementation: "贯彻落实意见",
+      memberSpeeches: [{ personId: "person-member", name: "委员甲", content: "委员发言" }],
+      secretaryClosing: "书记最后发言",
+    });
   });
 });

@@ -4,21 +4,33 @@ import { ChevronDown, CircleAlert, FileText, PanelRightOpen } from "lucide-react
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   module002BuildAiDocumentBody,
+  module002BuildCommitteeAiDocumentBody,
   module002GetExportChecks,
   module002GetOrderedSpeakers,
 } from "./domain/module002Document";
 import {
+  module002GetCommitteeMembers,
+  module002GetCommitteePeople,
+  module002GetCommitteeSourceRecords,
+  module002IsCommitteeMeeting,
+} from "./domain/module002CommitteeMeeting";
+import {
   module002GetPersonPromptIdentifier,
+  module002GetCommitteeProtocolText,
   module002GetPromptIdentityField,
   module002GetStandardProtocolText,
   module002RenderPrompt,
   module002SerializePersonCards,
   module002ValidateAiResult,
+  module002ValidateCommitteeAiResult,
+  module002ValidateCommitteePrompt,
   module002ValidatePrompt,
   module002ValidateSingleSpeechResult,
 } from "./ai/module002Prompt";
 import { module002LoadModels, module002RequestAi } from "./ai/module002AiClient";
-import { module002CreateDraftFingerprint, module002SaveDocx } from "./export/module002Docx";
+import { module002CreateDraftFingerprint } from "./export/module002Docx";
+import { module002SaveExportBundle } from "./export/module002ExportBundle";
+import Module002ExportTemplateDialog from "./export/module002ExportTemplateDialog";
 import { module002ReleaseOcrWorker } from "./parser/module002FileParser";
 import { useModule002Store } from "./state/module002Store";
 import {
@@ -78,6 +90,7 @@ export default function Module002App() {
   const [module002TemplateDialogOpen, setModule002TemplateDialogOpen] = useState(false);
   const [module002PeopleDialogOpen, setModule002PeopleDialogOpen] = useState(false);
   const [module002FormatDialogOpen, setModule002FormatDialogOpen] = useState(false);
+  const [module002ExportTemplateDialogOpen, setModule002ExportTemplateDialogOpen] = useState(false);
   const [module002SwitchDialogOpen, setModule002SwitchDialogOpen] = useState(false);
   const [module002RevisePersonId, setModule002RevisePersonId] = useState(null);
   const [module002ReviseInstruction, setModule002ReviseInstruction] = useState("");
@@ -234,6 +247,10 @@ export default function Module002App() {
 
   /** 在一次请求中按人物卡序号生成全部普通交流发言。 */
   async function module002GenerateAll() {
+    if (module002IsCommitteeMeeting(module002Draft)) {
+      await module002GenerateCommitteeMinutes();
+      return;
+    }
     const module002PromptErrors = module002ValidatePrompt(module002Draft.prompt);
     if (module002PromptErrors.length) {
       setModule002Notice({ type: "error", text: module002PromptErrors[0] });
@@ -283,6 +300,110 @@ export default function Module002App() {
       setModule002Notice({ type: "error", text: module002Error.message || "发言生成失败，现有内容未改变" });
     } finally {
       setModule002AiBusy(false);
+    }
+  }
+
+  /** 按单份材料生成支委会书记双段发言和委员发言，失败时绝不覆盖已有正文。 */
+  async function module002GenerateCommitteeMinutes() {
+    const module002PromptErrors = module002ValidateCommitteePrompt(
+      module002Draft.prompt,
+    );
+    if (module002PromptErrors.length) {
+      setModule002Notice({ type: "error", text: module002PromptErrors[0] });
+      module002Store.module002FocusSection("speakers");
+      return;
+    }
+    const module002CommitteePeople = module002GetCommitteePeople(
+      module002Draft,
+      module002Config,
+    );
+    const module002CommitteeMembers = module002GetCommitteeMembers(
+      module002Draft,
+      module002Config,
+    );
+    const module002Records = module002GetCommitteeSourceRecords(module002Draft);
+    const module002IdentityField = module002GetPromptIdentityField(
+      module002Draft.prompt,
+    );
+    setModule002AiBusy(true);
+    setModule002Notice(null);
+    try {
+      const module002Results = [];
+      for (const module002Record of module002Records) {
+        const module002RenderedPrompt = module002RenderPrompt(module002Draft.prompt, {
+          CURRENT_DOCUMENT_BODY: module002BuildCommitteeAiDocumentBody(
+            module002Draft,
+            module002Record,
+          ),
+          PERSON_CARDS: module002SerializePersonCards(
+            module002CommitteePeople,
+            module002Config.personFields,
+            module002IdentityField,
+          ),
+        });
+        let module002Response = await module002RequestAi({
+          action: "generate",
+          model: module002Config.settings.preferredModel,
+          prompt: module002RenderedPrompt,
+        });
+        let module002Raw;
+        try {
+          module002Raw = JSON.parse(module002Response.content);
+          module002ValidateCommitteeAiResult({
+            module002RawResult: module002Raw,
+            module002CommitteeMembers,
+            module002IdentityField,
+          });
+        } catch (module002ProtocolError) {
+          module002Response = await module002RequestAi({
+            action: "repair",
+            model: module002Config.settings.preferredModel,
+            prompt: `只修复下面返回内容的 JSON 格式和固定字段，不改写任何发言内容。\n${module002GetCommitteeProtocolText(module002IdentityField)}\n\n原始返回：\n${module002Response.content}`,
+          });
+          module002Raw = JSON.parse(module002Response.content);
+        }
+        const module002Validated = module002ValidateCommitteeAiResult({
+          module002RawResult: module002Raw,
+          module002CommitteeMembers,
+          module002IdentityField,
+        });
+        module002Results.push({
+          sourceId: module002Record.source.id,
+          ...module002Validated,
+        });
+      }
+      module002Store.module002ApplyCommitteeAiResults(module002Results);
+      setModule002Notice({
+        type: "success",
+        text: module002Results.length
+          ? "支委会会议详细记录已按材料生成并通过人员协议校验"
+          : "支委会固定结构已生成，可继续补充议题材料",
+      });
+    } catch (module002Error) {
+      setModule002Notice({
+        type: "error",
+        text: module002Error.message || "支委会发言生成失败，现有内容未改变",
+      });
+    } finally {
+      setModule002AiBusy(false);
+    }
+  }
+
+  /** 经用户确认切换类型，并由状态中心保留本次会议的基本信息和材料。 */
+  function module002ChangeMeetingType(module002MeetingType) {
+    if (module002MeetingType === module002Draft.meetingInfo.meetingType) return;
+    if (
+      !window.confirm(
+        "切换会议类型会按新模板重建正文，当前基本信息、人物和材料会保留，已有正文会被替换。是否继续？",
+      )
+    ) {
+      return;
+    }
+    try {
+      module002Store.module002ChangeMeetingType(module002MeetingType);
+      setModule002Notice({ type: "success", text: "会议类型已切换，已按新模板等待生成正文" });
+    } catch (module002Error) {
+      setModule002Notice({ type: "error", text: module002Error.message || "会议类型切换失败" });
     }
   }
 
@@ -354,7 +475,7 @@ export default function Module002App() {
   }
 
   /** 通过检查后生成 DOCX，并记录此次导出内容指纹。 */
-  async function module002ExportWord() {
+  async function module002ExportWord(module002Options = {}) {
     const module002Checks = module002GetExportChecks(module002Draft, module002Config);
     if (module002Checks.length) {
       setModule002Notice({ type: "error", text: module002Checks[0].label });
@@ -362,9 +483,20 @@ export default function Module002App() {
     }
     setModule002ExportBusy(true);
     try {
-      const module002Fingerprint = await module002SaveDocx(module002Draft, module002Config);
+      const module002Exported = await module002SaveExportBundle({
+        module002Draft,
+        module002Config,
+        module002WorkspaceHandle,
+        module002Options,
+      });
+      const module002Fingerprint = module002Exported.fingerprint;
       module002Store.module002UpdateDraft((module002NextDraft) => ({ ...module002NextDraft, exportedFingerprint: module002Fingerprint }));
-      setModule002Notice({ type: "success", text: "Word 已保存；当前草稿继续保留" });
+      setModule002Notice({
+        type: "success",
+        text: module002Exported.fileNames.length > 1
+          ? "会议记录及勾选附件已保存；当前草稿继续保留"
+          : "Word 已保存；当前草稿继续保留",
+      });
       return true;
     } catch (module002Error) {
       if (module002Error?.name !== "AbortError") setModule002Notice({ type: "error", text: module002Error.message || "Word 导出失败" });
@@ -453,8 +585,10 @@ export default function Module002App() {
           module002OnExport={module002ExportWord}
           module002OnFocusSection={module002Store.module002FocusSection}
           module002OnGenerate={module002GenerateAll}
+          module002OnChangeMeetingType={module002ChangeMeetingType}
           module002OnMeetingInfo={module002Store.module002UpdateMeetingInfo}
           module002OnOpenFormat={() => setModule002FormatDialogOpen(true)}
+          module002OnOpenExportTemplates={() => setModule002ExportTemplateDialogOpen(true)}
           module002OnOpenPeople={() => setModule002PeopleDialogOpen(true)}
           module002OnOpenTemplates={() => setModule002TemplateDialogOpen(true)}
           module002OnRevisePerson={(module002PersonId) => {
@@ -471,9 +605,10 @@ export default function Module002App() {
       {module002RightCollapsed && module002Draft ? <button aria-label="展开配置区" className="module002FloatingExpand" onClick={() => setModule002RightCollapsed(false)} type="button"><PanelRightOpen size={18} /></button> : null}
 
       <Module002TemplatePicker module002Config={module002Config} module002OnChoose={(module002TemplateId) => { module002Store.module002StartDraft(module002TemplateId); setModule002TemplatePickerOpen(false); }} module002OnClose={() => setModule002TemplatePickerOpen(false)} module002Open={module002TemplatePickerOpen} />
-      {module002TemplateDialogOpen ? <Module002TemplateDialog module002Config={module002Config} module002OnChange={module002Store.module002UpdateConfig} module002OnClose={() => setModule002TemplateDialogOpen(false)} module002Open /> : null}
+      {module002TemplateDialogOpen ? <Module002TemplateDialog module002Config={module002Config} module002Draft={module002Draft} module002OnChange={module002Store.module002UpdateConfig} module002OnClose={() => setModule002TemplateDialogOpen(false)} module002Open /> : null}
       {module002PeopleDialogOpen ? <Module002PeopleDialog module002Config={module002Config} module002OnAddField={module002Store.module002AddPersonField} module002OnChange={module002Store.module002UpdateConfig} module002OnClose={() => setModule002PeopleDialogOpen(false)} module002OnRemoveField={module002Store.module002RemovePersonField} module002Open /> : null}
       {module002FormatDialogOpen ? <Module002FormatDialog module002Config={module002Config} module002Draft={module002Draft} module002OnApplyToDraft={module002ApplyFormatToCurrentDraft} module002OnChangeConfig={module002Store.module002UpdateConfig} module002OnClose={() => setModule002FormatDialogOpen(false)} module002Open /> : null}
+      {module002ExportTemplateDialogOpen ? <Module002ExportTemplateDialog module002Config={module002Config} module002OnChange={module002Store.module002UpdateConfig} module002OnClose={() => setModule002ExportTemplateDialogOpen(false)} module002Open module002WorkspaceHandle={module002WorkspaceHandle} /> : null}
       <Module002Dialog module002Description="更换模板会结束当前草稿，做出选择前不会切换。" module002Footer={<><button className="module002SecondaryButton" disabled={module002ExportBusy} onClick={async () => { if (await module002ExportWord()) await module002DiscardAndChooseTemplate(); }} type="button">先导出Word</button><button className="module002DangerButton" onClick={module002DiscardAndChooseTemplate} type="button">舍弃草稿</button><button className="module002SecondaryButton" onClick={() => setModule002SwitchDialogOpen(false)} type="button">取消操作</button></>} module002OnClose={() => setModule002SwitchDialogOpen(false)} module002Open={module002SwitchDialogOpen} module002Title="更换模板或开始新会议" />
       <Module002Dialog
         module002Description="只发送目标人物卡、当前发言、当前正文和本次修改要求。"

@@ -1,8 +1,14 @@
 import { z } from "zod";
 
-export const module002WorkspaceFormatVersion = 1;
+export const module002WorkspaceFormatVersion = 4;
 export const module002DraftFormatVersion = 1;
 export const module002PlaceholderPrompt = "【待用户提供真实业务Prompt】";
+export const module002SpeechLengthFieldId = "speechLength";
+
+/** 判断人物卡的发言字数是否为允许发送给 AI 的正整数。 */
+export function module002IsValidSpeechLength(module002Value) {
+  return /^[1-9]\d*$/.test(String(module002Value ?? "").trim());
+}
 
 export const module002ModuleTypeSchema = z.enum([
   "mainTitle",
@@ -14,6 +20,12 @@ export const module002ModuleTypeSchema = z.enum([
   "hostClosing",
   "staticText",
   "customField",
+]);
+
+/** 当前已确认并可在会议编辑区选择的会议类型。 */
+export const module002MeetingTypeSchema = z.enum([
+  "partyCongress",
+  "committeeMeeting",
 ]);
 
 export const module002TextStyleSchema = z.object({
@@ -82,6 +94,7 @@ export const module002TemplateSchema = z.object({
   id: z.string().min(1),
   branchId: z.string().min(1),
   name: z.string().min(1),
+  meetingType: module002MeetingTypeSchema.default("partyCongress"),
   revision: z.number().int().nonnegative(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
@@ -117,6 +130,37 @@ export const module002PersonSchema = z.object({
   isExample: z.boolean().default(false),
 });
 
+/** 通知模板中六段可由用户映射的业务文字位置。 */
+export const module002NoticeTemplateMappingSchema = z.object({
+  title: z.number().int().nonnegative().nullable().default(null),
+  recipient: z.number().int().nonnegative().nullable().default(null),
+  explanation: z.number().int().nonnegative().nullable().default(null),
+  topics: z.number().int().nonnegative().nullable().default(null),
+  attire: z.number().int().nonnegative().nullable().default(null),
+  signatureDate: z.number().int().nonnegative().nullable().default(null),
+});
+
+/** 签到簿中三项可由用户映射的合并单元格区域。 */
+export const module002AttendanceTemplateMappingSchema = z.object({
+  organization: z.string().default(""),
+  meetingName: z.string().default(""),
+  topics: z.string().default(""),
+});
+
+/** 保存内置或本地自定义的通知、签到簿模板和字段映射。 */
+export const module002ExportTemplatesSchema = z.object({
+  notice: z.object({
+    source: z.enum(["builtIn", "custom"]).default("builtIn"),
+    customFileName: z.string().nullable().default(null),
+    mapping: module002NoticeTemplateMappingSchema,
+  }),
+  attendance: z.object({
+    source: z.enum(["builtIn", "custom"]).default("builtIn"),
+    customFileName: z.string().nullable().default(null),
+    mapping: module002AttendanceTemplateMappingSchema,
+  }),
+});
+
 export const module002WorkspaceConfigSchema = z.object({
   formatVersion: z.literal(module002WorkspaceFormatVersion),
   workspaceId: z.string().min(1),
@@ -125,9 +169,32 @@ export const module002WorkspaceConfigSchema = z.object({
   updatedAt: z.string().datetime(),
   branches: z.array(module002BranchSchema).length(3),
   templates: z.array(module002TemplateSchema),
-  personFields: z.array(module002PersonFieldSchema).min(4),
+  personFields: z.array(module002PersonFieldSchema).min(5),
   people: z.array(module002PersonSchema),
   documentFormat: module002DocumentFormatSchema,
+  exportTemplates: module002ExportTemplatesSchema.default({
+    notice: {
+      source: "builtIn",
+      customFileName: null,
+      mapping: {
+        title: 7,
+        recipient: 9,
+        explanation: 10,
+        topics: 11,
+        attire: 12,
+        signatureDate: 22,
+      },
+    },
+    attendance: {
+      source: "builtIn",
+      customFileName: null,
+      mapping: {
+        organization: "C2:F2",
+        meetingName: "C3:F3",
+        topics: "C4:F4",
+      },
+    },
+  }),
   settings: z.object({
     preferredModel: z.string().min(1),
   }),
@@ -136,6 +203,7 @@ export const module002WorkspaceConfigSchema = z.object({
 export const module002TopicSourceSchema = z.object({
   id: z.string().min(1),
   fileName: z.string().min(1),
+  title: z.string().default(""),
   fileType: z.enum(["docx", "pdf", "image"]),
   status: z.enum(["pending", "parsing", "ready", "needsSelection", "failed"]),
   selectedText: z.string().default(""),
@@ -153,6 +221,7 @@ export const module002TopicSchema = z.object({
 
 export const module002MeetingInfoSchema = z.object({
   meetingName: z.string(),
+  meetingType: module002MeetingTypeSchema.default("partyCongress"),
   date: z.string(),
   time: z.string(),
   location: z.string(),

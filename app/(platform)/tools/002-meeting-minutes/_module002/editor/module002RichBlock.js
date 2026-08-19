@@ -8,7 +8,7 @@ import { TextStyleKit } from "@tiptap/extension-text-style";
 import Underline from "@tiptap/extension-underline";
 import { useEffect } from "react";
 
-/** 在段落中保留议题详细记录的二级标题语义，供网页和 Word 同步套用样式。 */
+/** 在段落中保留议题详细记录的历史二级标题语义，兼容已保存的党员大会草稿。 */
 const Module002TopicDetailTitle = Extension.create({
   name: "module002TopicDetailTitle",
   addGlobalAttributes() {
@@ -22,6 +22,52 @@ const Module002TopicDetailTitle = Extension.create({
           renderHTML: (module002Attributes) =>
             module002Attributes.module002TopicDetailTitle
               ? { "data-module002-topic-detail-title": "true" }
+              : {},
+        },
+      },
+    }];
+  },
+});
+
+/** 在段落中保留二级、三级标题层级，供支委会网页与 Word 同步套用样式。 */
+const Module002TopicDetailLevel = Extension.create({
+  name: "module002TopicDetailLevel",
+  addGlobalAttributes() {
+    return [{
+      types: ["paragraph"],
+      attributes: {
+        module002TopicDetailLevel: {
+          default: 0,
+          parseHTML: (module002Element) =>
+            Number(module002Element.getAttribute("data-module002-topic-detail-level") || 0),
+          renderHTML: (module002Attributes) =>
+            module002Attributes.module002TopicDetailLevel
+              ? {
+                  "data-module002-topic-detail-level": String(
+                    module002Attributes.module002TopicDetailLevel,
+                  ),
+                }
+              : {},
+        },
+      },
+    }];
+  },
+});
+
+/** 标记支委会固定的“党支部书记传达”语句，保证页面与 Word 同步居中。 */
+const Module002CommitteeSecretaryConvey = Extension.create({
+  name: "module002CommitteeSecretaryConvey",
+  addGlobalAttributes() {
+    return [{
+      types: ["paragraph"],
+      attributes: {
+        module002CommitteeSecretaryConvey: {
+          default: false,
+          parseHTML: (module002Element) =>
+            module002Element.getAttribute("data-module002-committee-secretary-convey") === "true",
+          renderHTML: (module002Attributes) =>
+            module002Attributes.module002CommitteeSecretaryConvey
+              ? { "data-module002-committee-secretary-convey": "true" }
               : {},
         },
       },
@@ -106,6 +152,8 @@ export default function Module002RichBlock({
       TextStyleKit.configure({ backgroundColor: false }),
       TextAlign.configure({ types: ["paragraph"] }),
       Module002TopicDetailTitle,
+      Module002TopicDetailLevel,
+      Module002CommitteeSecretaryConvey,
       Module002MeetingTimeLocation,
       Module002MeetingTimeLocationSpacer,
     ],

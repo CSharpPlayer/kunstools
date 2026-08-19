@@ -399,6 +399,159 @@
   min-height: 100%;
 }
 
+.platformHomeContent {
+  min-height: 100%;
+}
+
+.platformDashboard {
+  display: grid;
+  gap: 16px;
+  margin: 24px 24px 0;
+  padding: 18px;
+  background: var(--platformSurface);
+  border: 1px solid var(--platformBorder);
+  border-radius: 10px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.025);
+  animation: platformDashboardEnter 220ms ease-out both;
+}
+
+.platformDashboardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.platformDashboardTitle {
+  margin: 0;
+  color: var(--platformText);
+  font-size: 15px;
+  font-weight: 620;
+  line-height: 1.35;
+}
+
+.platformDashboardAvailability {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 7px;
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.platformDashboardAvailabilityReady {
+  color: #15803d;
+}
+
+.platformDashboardAvailabilityUnavailable {
+  color: #b45309;
+}
+
+.platformDashboardRefresh {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 6px 10px;
+  color: #1d4ed8;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 570;
+  background: var(--platformBlueSoft);
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 160ms ease-out, border-color 160ms ease-out,
+    transform 160ms ease-out;
+}
+
+.platformDashboardRefresh:hover:not(:disabled) {
+  background: #dbeafe;
+  border-color: #bfdbfe;
+  transform: translateY(-1px);
+}
+
+.platformDashboardRefresh:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+.platformDashboardRefreshing {
+  animation: platformDashboardSpin 700ms linear infinite;
+}
+
+.platformDashboardBalanceGroups {
+  display: grid;
+  gap: 12px;
+}
+
+.platformDashboardBalanceGroup {
+  display: grid;
+  gap: 7px;
+}
+
+.platformDashboardCurrency {
+  color: var(--platformMuted);
+  font-size: 11px;
+  font-weight: 620;
+  letter-spacing: 0.04em;
+}
+
+.platformDashboardCards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.platformDashboardCard,
+.platformDashboardCardsPlaceholder > span {
+  min-width: 0;
+  min-height: 76px;
+  padding: 12px;
+  background: #f8fbff;
+  border: 1px solid #e5eefb;
+  border-radius: 8px;
+}
+
+.platformDashboardCard {
+  display: grid;
+  align-content: space-between;
+  gap: 7px;
+}
+
+.platformDashboardCard > span {
+  overflow: hidden;
+  color: var(--platformMuted);
+  font-size: 12px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.platformDashboardCard > strong {
+  overflow: hidden;
+  color: var(--platformText);
+  font-size: 20px;
+  font-weight: 640;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.platformDashboardCardsPlaceholder > span {
+  background: linear-gradient(90deg, #f5f7fb 20%, #edf2f9 50%, #f5f7fb 80%);
+  background-size: 220% 100%;
+  animation: platformDashboardSkeleton 1.25s ease-in-out infinite;
+}
+
+.platformDashboardUpdatedAt {
+  margin: -4px 0 0;
+  color: var(--platformMuted);
+  font-size: 11px;
+  line-height: 1.3;
+}
+
 .platformHomeGrid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(148px, 160px));
@@ -407,6 +560,34 @@
   justify-content: start;
   min-height: 100%;
   padding: 24px;
+}
+
+@keyframes platformDashboardEnter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes platformDashboardSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes platformDashboardSkeleton {
+  0% {
+    background-position: 100% 0;
+  }
+
+  100% {
+    background-position: -100% 0;
+  }
 }
 
 .platformToolCard {
@@ -683,6 +864,10 @@
     padding: 16px;
   }
 
+  .platformDashboard {
+    margin: 16px 16px 0;
+  }
+
   .platformToolCard {
     width: 100%;
     min-width: 148px;
@@ -695,6 +880,20 @@
 }
 
 @media (max-width: 359px) {
+  .platformDashboard {
+    margin: 12px 12px 0;
+    padding: 14px;
+  }
+
+  .platformDashboardHeader {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .platformDashboardCards {
+    grid-template-columns: 1fr;
+  }
+
   .platformHomeGrid {
     grid-template-columns: 1fr;
   }

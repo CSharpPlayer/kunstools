@@ -1,4 +1,16 @@
 import { module002PlaceholderPrompt } from "./module002Schemas";
+import {
+  module002BuildCommitteeSecretaryConveyText,
+  module002CommitteeSectionTitles,
+  module002CommitteeTopicSummaryLines,
+  module002GetCommitteeMembers,
+  module002GetCommitteePeople,
+  module002GetCommitteeSecretary,
+  module002GetCommitteeSourceRecords,
+  module002GetCommitteeSpeechKey,
+  module002GetCommitteeTopicSummaryLines,
+  module002IsCommitteeMeeting,
+} from "./module002CommitteeMeeting";
 
 /** 获取当前支部人物，避免跨支部选择。 */
 export function module002GetBranchPeople(module002Config, module002BranchId) {
@@ -126,6 +138,135 @@ function module002BuildTopicDetailsContent(module002Topics) {
   };
 }
 
+/** 读取支委会可编辑议题说明，映射为正文使用的二级标题。 */
+function module002GetCommitteeSectionTitles(module002Draft) {
+  const module002Lines = module002GetCommitteeTopicSummaryLines(module002Draft).map(
+    (module002Line) => module002Line.replace(/[；;。]\s*$/, "").trim(),
+  );
+  return {
+    first: `一、${module002Lines[0] || module002CommitteeSectionTitles.first.slice(2)}`,
+    second: `二、${module002Lines[1] || module002CommitteeSectionTitles.second.slice(2)}`,
+  };
+}
+
+/** 返回材料的可编辑三级标题，优先使用用户单独维护的标题。 */
+function module002GetCommitteeSourceTitle(module002Topic, module002Source) {
+  return module002Source.title?.trim()
+    || module002Source.fileName?.replace(/\.[^.]+$/, "")
+    || module002Topic.title?.trim()
+    || "未命名议题材料";
+}
+
+/** 为支委会生成“二级标题 + 每份材料三级标题 + 支委发言”的可编辑正文。 */
+function module002BuildCommitteeTopicDetailsContent(module002Draft, module002Config) {
+  const module002SectionTitles = module002GetCommitteeSectionTitles(module002Draft);
+  const module002Secretary = module002GetCommitteeSecretary(
+    module002Draft,
+    module002Config,
+  );
+  const module002Members = module002GetCommitteeMembers(
+    module002Draft,
+    module002Config,
+  );
+  const module002Records = module002GetCommitteeSourceRecords(module002Draft);
+  const module002Paragraphs = [];
+
+  ["first", "second"].forEach((module002Section) => {
+    module002Paragraphs.push({
+      text: module002SectionTitles[module002Section],
+      level: 2,
+    });
+    module002Records
+      .filter((module002Record) => module002Record.section === module002Section)
+      .forEach((module002Record, module002RecordIndex) => {
+        const { source: module002Source } = module002Record;
+        module002Paragraphs.push({
+          text: `（${module002FormatTopicDetailOrdinal(module002RecordIndex)}）${module002GetCommitteeSourceTitle(
+            module002Draft.topics.find(
+              (module002Topic) => module002Topic.id === module002Record.topicId,
+            ) ?? {},
+            module002Source,
+          )}`,
+          level: 3,
+        });
+        module002Paragraphs.push({
+          text: module002BuildCommitteeSecretaryConveyText(module002Secretary?.name),
+          level: 0,
+          committeeSecretaryConvey: true,
+        });
+        const module002Implementation = module002Draft.speeches[
+          module002GetCommitteeSpeechKey(
+            module002Source.id,
+            "secretaryImplementation",
+          )
+        ];
+        if (module002Secretary && module002Implementation?.trim()) {
+          module002Paragraphs.push({
+            text: `${module002Secretary.name}：${module002Implementation.trim()}`,
+            level: 0,
+          });
+        }
+        module002Members.forEach((module002Person) => {
+          const module002Content = module002Draft.speeches[
+            module002GetCommitteeSpeechKey(
+              module002Source.id,
+              "member",
+              module002Person.id,
+            )
+          ];
+          if (module002Content?.trim()) {
+            module002Paragraphs.push({
+              text: `${module002Person.name}：${module002Content.trim()}`,
+              level: 0,
+            });
+          }
+        });
+        const module002SecretaryClosing = module002Draft.speeches[
+          module002GetCommitteeSpeechKey(
+            module002Source.id,
+            "secretaryClosing",
+          )
+        ];
+        if (module002Secretary && module002SecretaryClosing?.trim()) {
+          module002Paragraphs.push({
+            text: `${module002Secretary.name}：${module002SecretaryClosing.trim()}`,
+            level: 0,
+          });
+        }
+      });
+  });
+
+  const module002Host = module002Config.people.find(
+    (module002Person) =>
+      module002Person.id === module002Draft.meetingInfo.hostPersonId,
+  );
+  module002Paragraphs.push({
+    text: `${module002Host?.name || "主持人"}：今天的议题就这么多，散会！`,
+    level: 0,
+  });
+
+  return {
+    text: module002Paragraphs.map((module002Paragraph) => module002Paragraph.text).join("\n"),
+    editorJson: {
+      type: "doc",
+      content: module002Paragraphs.map((module002Paragraph) => ({
+        type: "paragraph",
+        attrs: {
+          ...(module002Paragraph.level
+            ? { module002TopicDetailLevel: module002Paragraph.level }
+            : {}),
+          ...(module002Paragraph.committeeSecretaryConvey
+            ? { module002CommitteeSecretaryConvey: true }
+            : {}),
+        },
+        content: module002Paragraph.text
+          ? [{ type: "text", text: module002Paragraph.text }]
+          : [],
+      })),
+    },
+  };
+}
+
 /** 根据草稿和模板快照产生唯一的结构化文档块列表。 */
 export function module002BuildDocumentBlocks(module002Draft, module002Config) {
   if (!module002Draft) return [];
@@ -166,18 +307,23 @@ export function module002BuildDocumentBlocks(module002Draft, module002Config) {
         }
         break;
       case "topicSummary":
-        module002Text = `议题：\n${module002Draft.topics
-          .map((module002Topic, module002Index) => `${module002Index + 1}.${module002Topic.title}`)
-          .join("\n")}`;
+        module002Text = module002IsCommitteeMeeting(module002Draft)
+          ? `议题：\n${module002CommitteeTopicSummaryLines.join("\n")}`
+          : `议题：\n${module002Draft.topics
+              .map((module002Topic, module002Index) => `${module002Index + 1}.${module002Topic.title}`)
+              .join("\n")}`;
         break;
       case "hostOpening":
         module002Text = module002BuildHostOpeningText(module002Host?.name);
         break;
       case "topicDetails":
         {
-          const module002TopicDetails = module002BuildTopicDetailsContent(
-            module002Draft.topics,
-          );
+          const module002TopicDetails = module002IsCommitteeMeeting(module002Draft)
+            ? module002BuildCommitteeTopicDetailsContent(
+                module002Draft,
+                module002Config,
+              )
+            : module002BuildTopicDetailsContent(module002Draft.topics);
           module002Text = module002TopicDetails.text;
           module002GeneratedEditorJson = module002TopicDetails.editorJson;
         }
@@ -227,12 +373,34 @@ export function module002BuildDocumentBlocks(module002Draft, module002Config) {
 
 /** 返回仅包含议题材料与会议详细记录的 AI 正文，排除固定主持词与旧发言。 */
 export function module002BuildAiDocumentBody(module002Draft, module002Config) {
+  if (module002IsCommitteeMeeting(module002Draft)) {
+    return module002GetCommitteeSourceRecords(module002Draft)
+      .map((module002Record) =>
+        module002BuildCommitteeAiDocumentBody(module002Draft, module002Record),
+      )
+      .join("\n\n");
+  }
   return module002BuildDocumentBlocks(module002Draft, module002Config)
     .filter((module002Block) =>
       ["topicSummary", "topicDetails"].includes(module002Block.moduleType),
     )
     .map((module002Block) => module002Block.text)
     .join("\n\n");
+}
+
+/** 仅向支委会单份材料对应的 AI 请求提供本份标题和原文。 */
+export function module002BuildCommitteeAiDocumentBody(
+  module002Draft,
+  module002Record,
+) {
+  const module002Topic = module002Draft.topics.find(
+    (module002Item) => module002Item.id === module002Record.topicId,
+  ) ?? {};
+  return [
+    `议题标题：${module002GetCommitteeSourceTitle(module002Topic, module002Record.source)}`,
+    "议题材料：",
+    module002Record.source.selectedText?.trim() ?? "",
+  ].join("\n");
 }
 
 /** 实时生成可点击定位的生成前检查清单。 */
@@ -246,12 +414,48 @@ export function module002GetGenerationChecks(module002Draft, module002Config) {
   if (!module002Info.location.trim()) module002Checks.push({ key: "location", label: "请填写地点", target: "meetingInfo" });
   if (!module002Info.hostPersonId || !module002Info.attendeePersonIds.includes(module002Info.hostPersonId)) module002Checks.push({ key: "host", label: "主持人必须在参加人员中", target: "meetingInfo" });
   if (!module002Info.recorderPersonId || !module002Info.attendeePersonIds.includes(module002Info.recorderPersonId)) module002Checks.push({ key: "recorder", label: "记录人必须在参加人员中", target: "meetingInfo" });
-  if (!module002Draft.topics.length) module002Checks.push({ key: "topics", label: "请至少添加一个有效议题", target: "topics" });
-  module002Draft.topics.forEach((module002Topic, module002Index) => {
-    if (!module002Topic.title.trim()) module002Checks.push({ key: `topic-${module002Topic.id}`, label: `第 ${module002Index + 1} 个议题标题为空`, target: "topics" });
-    if (!module002Topic.sources.length || module002Topic.sources.some((module002Source) => !module002Source.selectedText.trim())) module002Checks.push({ key: `source-${module002Topic.id}`, label: `第 ${module002Index + 1} 个议题仍有材料未取得合格原文`, target: "topics" });
-  });
-  if (!module002GetOrderedSpeakers(module002Draft, module002Config).length) module002Checks.push({ key: "speakers", label: "请至少勾选一位发言人", target: "speakers" });
+  if (module002IsCommitteeMeeting(module002Draft)) {
+    const module002Secretary = module002GetCommitteeSecretary(
+      module002Draft,
+      module002Config,
+    );
+    const module002CommitteePeople = module002GetCommitteePeople(
+      module002Draft,
+      module002Config,
+    );
+    if (!module002Secretary) {
+      module002Checks.push({
+        key: "committeeSecretary",
+        label: "请在人物卡的支部岗位中补充一名书记",
+        target: "people",
+      });
+    }
+    if (!module002CommitteePeople.length) {
+      module002Checks.push({
+        key: "committeePeople",
+        label: "请至少安排一名支部岗位含“委员”或“书记”的出席支委",
+        target: "people",
+      });
+    }
+    module002GetCommitteeSourceRecords(module002Draft).forEach(
+      (module002Record) => {
+        if (!module002Record.source.selectedText?.trim()) {
+          module002Checks.push({
+            key: `source-${module002Record.source.id}`,
+            label: `${module002Record.source.fileName}仍未取得合格原文`,
+            target: "topics",
+          });
+        }
+      },
+    );
+  } else {
+    if (!module002Draft.topics.length) module002Checks.push({ key: "topics", label: "请至少添加一个有效议题", target: "topics" });
+    module002Draft.topics.forEach((module002Topic, module002Index) => {
+      if (!module002Topic.title.trim()) module002Checks.push({ key: `topic-${module002Topic.id}`, label: `第 ${module002Index + 1} 个议题标题为空`, target: "topics" });
+      if (!module002Topic.sources.length || module002Topic.sources.some((module002Source) => !module002Source.selectedText.trim())) module002Checks.push({ key: `source-${module002Topic.id}`, label: `第 ${module002Index + 1} 个议题仍有材料未取得合格原文`, target: "topics" });
+    });
+    if (!module002GetOrderedSpeakers(module002Draft, module002Config).length) module002Checks.push({ key: "speakers", label: "请至少勾选一位发言人", target: "speakers" });
+  }
   if (!module002Draft.prompt.trim() || module002Draft.prompt.includes(module002PlaceholderPrompt)) module002Checks.push({ key: "prompt", label: "请填写真实业务 Prompt", target: "speakers" });
   if (
     module002Draft.prompt.trim() &&
@@ -271,7 +475,15 @@ export function module002GetGenerationChecks(module002Draft, module002Config) {
     )
       ? "serialNumber"
       : "personId";
-    ["speeches", module002PromptIdentityField, "name", "content"].forEach(
+    [
+      "speeches",
+      module002PromptIdentityField,
+      "name",
+      "content",
+      ...(module002IsCommitteeMeeting(module002Draft)
+        ? ["secretaryImplementation", "secretaryClosing"]
+        : []),
+    ].forEach(
       (module002Field) => {
         if (!module002Draft.prompt.includes(`"${module002Field}"`)) {
           module002Checks.push({
@@ -299,10 +511,9 @@ export function module002GetGenerationChecks(module002Draft, module002Config) {
         });
       }
     });
-  const module002SelectedPeople = module002GetOrderedSpeakers(
-    module002Draft,
-    module002Config,
-  );
+  const module002SelectedPeople = module002IsCommitteeMeeting(module002Draft)
+    ? module002GetCommitteePeople(module002Draft, module002Config)
+    : module002GetOrderedSpeakers(module002Draft, module002Config);
   if (module002SelectedPeople.some((module002Person) => module002Person.isExample) && !module002Draft.examplePeopleConfirmed) module002Checks.push({ key: "examples", label: "示例人物尚未清理或本次确认", target: "people" });
   if (module002SelectedPeople.some((module002Person) => !module002Person.name.trim() || module002Person.name === "待填写姓名")) module002Checks.push({ key: "personNames", label: "所选人物仍有姓名未填写", target: "people" });
   const module002BranchNames = module002GetBranchPeople(module002Config, module002Draft.branchId)
@@ -326,6 +537,67 @@ export function module002GetExportChecks(module002Draft, module002Config) {
       !module002Check.key.startsWith("protocol-"),
   );
   if (!module002Draft) return module002Checks;
+  if (module002IsCommitteeMeeting(module002Draft)) {
+    const module002Secretary = module002GetCommitteeSecretary(
+      module002Draft,
+      module002Config,
+    );
+    const module002Members = module002GetCommitteeMembers(
+      module002Draft,
+      module002Config,
+    );
+    module002GetCommitteeSourceRecords(module002Draft).forEach(
+      (module002Record) => {
+        const module002SourceId = module002Record.source.id;
+        if (
+          !module002Draft.speeches[
+            module002GetCommitteeSpeechKey(
+              module002SourceId,
+              "secretaryImplementation",
+            )
+          ]?.trim()
+        ) {
+          module002Checks.push({
+            key: `committee-implementation-${module002SourceId}`,
+            label: `${module002Secretary?.name || "书记"}的贯彻落实意见为空`,
+            target: "document",
+          });
+        }
+        module002Members.forEach((module002Person) => {
+          if (
+            !module002Draft.speeches[
+              module002GetCommitteeSpeechKey(
+                module002SourceId,
+                "member",
+                module002Person.id,
+              )
+            ]?.trim()
+          ) {
+            module002Checks.push({
+              key: `committee-member-${module002SourceId}-${module002Person.id}`,
+              label: `${module002Person.name}的交流发言为空`,
+              target: "document",
+            });
+          }
+        });
+        if (
+          !module002Draft.speeches[
+            module002GetCommitteeSpeechKey(
+              module002SourceId,
+              "secretaryClosing",
+            )
+          ]?.trim()
+        ) {
+          module002Checks.push({
+            key: `committee-closing-${module002SourceId}`,
+            label: `${module002Secretary?.name || "书记"}的最后发言为空`,
+            target: "document",
+          });
+        }
+      },
+    );
+    return module002Checks;
+  }
   module002GetOrderedSpeakers(module002Draft, module002Config).forEach((module002Person) => {
     if (!module002Draft.speeches[module002Person.id]?.trim()) {
       const module002Name = module002Person.name ?? "所选人员";

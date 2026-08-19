@@ -16,6 +16,7 @@ function module002BuildRichParagraphs(
   module002Block,
   module002Style,
   module002SecondTitleStyle,
+  module002ThirdTitleStyle,
 ) {
   if (module002Block.editorJson?.type !== "doc") {
     return module002Block.text.split("\n").map((module002Text) => ({
@@ -26,16 +27,36 @@ function module002BuildRichParagraphs(
   }
   return (module002Block.editorJson.content ?? []).map((module002ParagraphNode) => {
     const module002IsTopicDetailTitle =
-      module002Block.moduleType === "topicDetails" &&
-      module002ParagraphNode.attrs?.module002TopicDetailTitle === true;
+      module002Block.moduleType === "topicDetails"
+      && (
+        module002ParagraphNode.attrs?.module002TopicDetailTitle === true
+        || module002ParagraphNode.attrs?.module002TopicDetailLevel === 2
+      );
+    const module002IsTopicDetailThirdTitle =
+      module002Block.moduleType === "topicDetails"
+      && module002ParagraphNode.attrs?.module002TopicDetailLevel === 3;
     const module002IsMeetingTimeLocation =
       module002Block.moduleType === "meetingSummary" &&
       module002ParagraphNode.attrs?.module002MeetingTimeLocation === true;
-    const module002ParagraphStyle = module002IsTopicDetailTitle
+    const module002IsCommitteeSecretaryConvey =
+      module002Block.moduleType === "topicDetails"
+      && module002ParagraphNode.attrs?.module002CommitteeSecretaryConvey === true;
+    const module002ParagraphStyleBase = module002IsTopicDetailTitle
       ? module002SecondTitleStyle
-      : module002Style;
+      : module002IsTopicDetailThirdTitle
+        ? module002ThirdTitleStyle
+        : module002Style;
+    const module002ParagraphStyle = module002IsCommitteeSecretaryConvey
+      ? {
+          ...module002ParagraphStyleBase,
+          align: "center",
+          firstLineIndentChars: 0,
+        }
+      : module002ParagraphStyleBase;
     return {
-    align: module002ParagraphNode.attrs?.textAlign ?? module002ParagraphStyle.align,
+    align: module002IsCommitteeSecretaryConvey
+      ? "center"
+      : module002ParagraphNode.attrs?.textAlign ?? module002ParagraphStyle.align,
     rightTab: module002IsMeetingTimeLocation,
     style: module002ParagraphStyle,
     runs: (module002ParagraphNode.content ?? []).map((module002TextNode) => {
@@ -109,6 +130,7 @@ export async function module002BuildDocx(module002Draft, module002Config) {
   } = await import("docx");
   const module002Format = module002Draft.documentFormatSnapshot;
   const module002SecondTitleStyle = module002Format.secondTitle;
+  const module002ThirdTitleStyle = module002Format.thirdTitle;
   const module002AlignmentMap = {
     left: Module002AlignmentType.LEFT,
     center: Module002AlignmentType.CENTER,
@@ -127,6 +149,7 @@ export async function module002BuildDocx(module002Draft, module002Config) {
         module002Block,
         module002Style,
         module002SecondTitleStyle,
+        module002ThirdTitleStyle,
       ).forEach(
         (module002RichParagraph) => {
         module002Paragraphs.push(
